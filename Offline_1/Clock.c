@@ -146,11 +146,22 @@ void display()
 {
     // Clear the color and depth buffers
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glFlush();
 
     // Reset transformations
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0); // Adjust as needed
+
+    int width = glutGet(GLUT_WINDOW_WIDTH);
+    int height = glutGet(GLUT_WINDOW_HEIGHT);
+
+    if(width <= height){
+        glOrtho(-1.0, 1.0, -1.0*(double)height/(double)width, 1.0*(double)height/(double)width, -1.0, 1.0);
+    }
+    else{
+        glOrtho(-1.0*(double)width/(double)height, 1.0*(double)width/(double)height, -1.0, 1.0, -1.0, 1.0);
+    } 
+
     glMatrixMode(GL_MODELVIEW);
 
     drawClockFace();
@@ -166,12 +177,17 @@ void display()
     glutSwapBuffers();
 }
 
+void reshape(int width, int height){
+    glViewport(0,0, width, height);
+}
+
 void timerFunction(int value)
 {
     // Request a redisplay
     glutPostRedisplay();
 
     // Register the timer again
+    // 16 ms for ~60 FPS
     glutTimerFunc(16, timerFunction, 0);
 }
 
@@ -192,6 +208,8 @@ int main(int argc,char** argv){
 
     // Register callback functions
     glutDisplayFunc(display);            // Called when screen needs to be redrawn
+
+    glutReshapeFunc(reshape);            // Called when window is resized
 
     // Use timer function instead of idle function for better control of animation speed
     glutTimerFunc(0, timerFunction, 0);
