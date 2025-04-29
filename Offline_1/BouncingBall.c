@@ -5,7 +5,7 @@
 
 
 // Camera position and orientation
-double eye_x = 4, eye_y = 4, eye_z = 4;          // Camera position coordinates
+double eye_x = 0, eye_y = 0, eye_z = 4;          // Camera position coordinates
 double center_x = 0, center_y = 0, center_z = 0; // Look-at point coordinates
 double up_x = 0, up_y = 1, up_z = 0;             // Up vector coordinates
 
@@ -55,6 +55,53 @@ void drawCube(){
     }glEnd();
 }
 
+void SpecialKeyListener(int key, int x, int y){
+    double shift_value = 0.1;
+
+    switch(key){
+        case GLUT_KEY_UP:{
+            eye_z -= shift_value;
+            center_z -= shift_value;
+            break;
+        }
+        case GLUT_KEY_DOWN:{
+            eye_z += shift_value;
+            center_z += shift_value;
+            break;
+        }
+        case GLUT_KEY_LEFT:{
+            eye_x -= shift_value;
+            center_x -= shift_value;
+            break;
+        }
+        case GLUT_KEY_RIGHT:{
+            eye_x += shift_value;
+            center_x += shift_value;
+            break;
+        }
+
+        case GLUT_KEY_PAGE_UP:{
+            eye_y += shift_value;
+            center_y += shift_value;
+            break;
+        }
+
+        case GLUT_KEY_PAGE_DOWN:{
+            eye_y -= shift_value;
+            center_y -= shift_value;
+            break;
+        }
+
+        default:{
+            printf("Unknown key pressed\n");
+            break;
+        }
+
+    }
+
+    glutPostRedisplay();
+}
+
 
 void display(){
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -99,7 +146,7 @@ int main(int argc, char** argv){
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-
+    glutSpecialFunc(SpecialKeyListener);
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glEnable(GL_DEPTH_TEST);
 
