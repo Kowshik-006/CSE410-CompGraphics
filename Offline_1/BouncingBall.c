@@ -13,17 +13,17 @@ void drawCube(){
     glBegin(GL_QUADS);{
         // Front Face
         glColor3f(1.0, 0.0, 0.0); // Red
-        glVertex3f(1.0, 1.0, 0.0);
-        glVertex3f(1.0, -1.0, 0.0);
-        glVertex3f(-1.0, -1.0, 0.0);
-        glVertex3f(-1.0, 1.0, 0.0);
+        glVertex3f(1.0, 1.0, 1.0);
+        glVertex3f(1.0, -1.0, 1.0);
+        glVertex3f(-1.0, -1.0, 1.0);
+        glVertex3f(-1.0, 1.0, 1.0);
 
         // Right Face
         glColor3f(0.0, 0.0, 1.0); // Blue
-        glVertex3f(1.0, 1.0, 0.0);
+        glVertex3f(1.0, 1.0, 1.0);
         glVertex3f(1.0, 1.0, -1.0);
         glVertex3f(1.0, -1.0, -1.0);
-        glVertex3f(1.0, -1.0, 0.0);
+        glVertex3f(1.0, -1.0, 1.0);
 
         // Back Face
         glColor3f(1.0, 1.0, 0.0); // Yellow
@@ -35,23 +35,23 @@ void drawCube(){
         // Left Face
         glColor3f(1.0, 0.0, 1.0);
         glVertex3f(-1.0, 1.0, -1.0);
-        glVertex3f(-1.0, 1.0, 0.0);
-        glVertex3f(-1.0, -1.0, 0.0);
+        glVertex3f(-1.0, 1.0, 1.0);
+        glVertex3f(-1.0, -1.0, 1.0);
         glVertex3f(-1.0, -1.0, -1.0);
 
         // Top Face
         glColor3f(0.0, 1.0, 0.0); // Green
-        glVertex3f(-1.0, 1.0, 0.0);
-        glVertex3f(1.0, 1.0, 0.0);
+        glVertex3f(-1.0, 1.0, 1.0);
+        glVertex3f(1.0, 1.0, 1.0);
         glVertex3f(1.0, 1.0, -1.0);
         glVertex3f(-1.0, 1.0, -1.0);
 
         // Bottom Face
         glColor3f(1.0, 0.5, 0.0); // Orange
-        glVertex3f(1.0, -1.0, 0.0);
+        glVertex3f(1.0, -1.0, 1.0);
         glVertex3f(1.0, -1.0, -1.0);
         glVertex3f(-1.0, -1.0, -1.0);
-        glVertex3f(-1.0, -1.0, 0.0);
+        glVertex3f(-1.0, -1.0, 1.0);
     }glEnd();
 }
 
@@ -84,7 +84,7 @@ void reshape(int width, int height)
     glLoadIdentity();
 
     // 45-degree field of view, aspect ratio, near and far clipping planes
-    gluPerspective(45.0f, aspect, 0.1f, 100.0f);
+    gluPerspective(60.0f, aspect, 0.1f, 100.0f);
 }
 
 
