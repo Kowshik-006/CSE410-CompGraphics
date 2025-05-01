@@ -2,10 +2,12 @@
 #include<stdlib.h>
 #include<math.h>
 #include<GL/glut.h>
-// #declare MediumWood = color red 0.65 green 0.50 blue 0.39
 #define pi 3.1416
 
 enum rotation_3d {yaw, pitch, roll};
+
+int simulate = 0;
+int showVelocityArrow = 0;
 
 // Camera position and orientation
 double eye_x = 4, eye_y = 4, eye_z = 4;          // Camera position point coordinates
@@ -18,19 +20,28 @@ typedef struct{
 
 typedef struct{
     double radius;
-    double x, y, z;
-    double velocity_x, velocity_y, velocity_z;
+    vector_3d position;
+    vector_3d velocity;
+    double rotationAngle;
+    vector_3d rotationAxis;
 }Ball;
 
 Ball ball = {
              0.1,
-             0.0, 0.9, 0.0, 
-             0.3, 0.0, 0.4 
+             {0.0, 0.9, 0.0}, // position 
+             {0.3, 0.1, 0.4}, // velocity
+             0.0,
+             {0.0, 0.0, 1.0}  // rotationAxis (around z-axis)
             };
 
-double gravity = -0.98;
+double gravity = -0.98; // The down direction is negative Y-axis
 double restitution = 0.75;
 double deltaTime = 0.016; // 60 FPS
+
+// Generate a random number between -1 and 1
+double getRandom() {
+    return ((double)rand() / RAND_MAX) * 2.0 - 1.0;
+}
 
 vector_3d add(vector_3d a, vector_3d b, vector_3d c){
     vector_3d result = {
@@ -129,10 +140,6 @@ vector_3d getRotatedVector(enum rotation_3d type, double angle){
         case yaw:{
             vector = getLookAtVector();
             axis = normalize(getUpVector());
-            // Updating the up coordinates to correspond to the actual up vector
-            // up_x = axis.x;
-            // up_y = axis.y;
-            // up_z = axis.z;
             break;
         }
         case pitch:{
@@ -333,6 +340,60 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             up_z = up_vector.z;
             break;
         }
+        case ' ':{ 
+            if(simulate){
+                simulate = 0;
+                printf("Simulation Paused\n");
+            }
+            else{
+                simulate = 1;
+                printf("Simulation Started\n");
+            } 
+            break;
+        }
+        case 'r':{
+            if(simulate){
+                return;
+            }
+            printf("The position and velocity of the ball have been reset\n");
+            ball.position = (vector_3d){getRandom(), getRandom(), getRandom()};
+            ball.velocity = (vector_3d){getRandom(), fabs(getRandom()), getRandom()};
+            ball.rotationAngle = 0.0;
+            ball.rotationAxis = (vector_3d){0.0, 0.0, 1.0};
+            break;
+        }
+        case '+':{
+            if(simulate){
+                return;
+            }
+            gravity -= 0.02;
+            printf("Gravity increased to %lf\n", gravity);
+            break;
+        }
+        case '-':{
+            if(simulate){
+                return;
+            }
+            if(gravity > -0.01){
+                printf("Gravity already at minimum\n");
+            }
+            else{
+                gravity += 0.02;
+                printf("Gravity decreased to %lf\n", gravity);
+            }
+            break;
+    }
+        case 'v':{ 
+            if(showVelocityArrow){
+                showVelocityArrow = 0;
+                printf("Velocity Arrow Turned Off\n");
+            }
+            else{
+                showVelocityArrow = 1;
+                printf("Velocity Arrow Turned On\n");
+            }
+            break;
+        }
         default:{
             printf("Unknown key pressed\n");
             break;
@@ -461,10 +522,26 @@ void display(){
     drawCube();
 
     glPushMatrix();
-    glTranslatef(ball.x, ball.y, ball.z);
-    glColor3f(0.65, 0.5, 0.39); // Wood ball
+    glTranslatef(ball.position.x, ball.position.y, ball.position.z);
+    glRotatef(ball.rotationAngle, ball.rotationAxis.x, ball.rotationAxis.y, ball.rotationAxis.z);
+    glColor3f(0.65, 0.5, 0.39); // Wooden ball
     glutSolidSphere(ball.radius, 32, 32);
     glPopMatrix();
+
+    if (showVelocityArrow) {
+        double scale = 0.8;
+        vector_3d velocity_arrow = {
+            ball.velocity.x * scale,
+            ball.velocity.y * scale,
+            ball.velocity.z * scale
+        };
+        glLineWidth(4.0);
+        glColor3f(1.0f, 0.0f, 0.0f);  // Red line for velocity
+        glBegin(GL_LINES);
+        glVertex3f(ball.position.x, ball.position.y, ball.position.z);
+        glVertex3f(ball.position.x + velocity_arrow.x, ball.position.y + velocity_arrow.y, ball.position.z + velocity_arrow.z);
+        glEnd();
+    }
 
     glutSwapBuffers();
 }
@@ -485,46 +562,75 @@ void reshape(int width, int height)
 }
 
 void updateBall() {
+    if(!simulate){
+        return;
+    }
     // Integrate
-    ball.velocity_y += gravity * deltaTime;
-    ball.x += ball.velocity_x * deltaTime;
-    ball.y += ball.velocity_y * deltaTime;
-    ball.z += ball.velocity_z * deltaTime;
+    ball.velocity.y += gravity * deltaTime;
+    ball.position.x += ball.velocity.x * deltaTime;
+    ball.position.y += ball.velocity.y * deltaTime;
+    ball.position.z += ball.velocity.z * deltaTime;
 
-    float minBound = -1.0f + ball.radius;
-    float maxBound =  1.0f - ball.radius;
+    double minBound = -1.0 + ball.radius;
+    double maxBound =  1.0 - ball.radius;
 
     // Floor bounce
-    if (ball.y < minBound) {
-        ball.y = minBound;
-        ball.velocity_y = -ball.velocity_y * restitution;
-        if (fabs(ball.velocity_y) < 0.01f) ball.velocity_y = 0;
+    if (ball.position.y < minBound) {
+        ball.position.y = minBound;
+        ball.velocity.y = -ball.velocity.y * restitution;
+        
+        // Ball comes to rest if vertical velocity is too small
+        if (fabs(ball.velocity.y) < 0.01){
+            ball.velocity.y = 0.0;
+        }
     }
 
     // Ceiling
-    if (ball.y > maxBound) {
-        ball.y = maxBound;
-        ball.velocity_y = -ball.velocity_y * restitution;
+    if (ball.position.y > maxBound) {
+        ball.position.y = maxBound;
+        ball.velocity.y = -ball.velocity.y * restitution;
     }
 
     // Side walls (X)
-    if (ball.x < minBound) {
-        ball.x = minBound;
-        ball.velocity_x = -ball.velocity_x * restitution;
+    if (ball.position.x < minBound) {
+        ball.position.x = minBound;
+        ball.velocity.x = -ball.velocity.x * restitution;
     }
-    if (ball.x > maxBound) {
-        ball.x = maxBound;
-        ball.velocity_x = -ball.velocity_x * restitution;
+    if (ball.position.x > maxBound) {
+        ball.position.x = maxBound;
+        ball.velocity.x = -ball.velocity.x * restitution;
     }
 
     // Front/back walls (Z)
-    if (ball.z < minBound) {
-        ball.z = minBound;
-        ball.velocity_z = -ball.velocity_z * restitution;
+    if (ball.position.z < minBound) {
+        ball.position.z = minBound;
+        ball.velocity.z = -ball.velocity.z * restitution;
     }
-    if (ball.z > maxBound) {
-        ball.z = maxBound;
-        ball.velocity_z = -ball.velocity_z * restitution;
+    if (ball.position.z > maxBound) {
+        ball.position.z = maxBound;
+        ball.velocity.z = -ball.velocity.z * restitution;
+    }
+
+    // Compute horizontal velocity (XZ plane)
+    double dx = ball.velocity.x * deltaTime;
+    double dz = ball.velocity.z * deltaTime;
+    double distance = sqrt(dx * dx + dz * dz);
+
+    if (distance > 0.0001f) {
+        // Axis = (-Z, 0, X) to rotate perpendicular to velocity and Y-up
+        ball.rotationAxis.x = -ball.velocity.z;
+        ball.rotationAxis.y = 0.0;
+        ball.rotationAxis.z = ball.velocity.x;
+
+        // Normalize axis
+        ball.rotationAxis = normalize(ball.rotationAxis);
+
+        // Update angle (convert to degrees)
+        double angleDelta = (distance / ball.radius) * (180.0 / pi);
+        ball.rotationAngle += angleDelta;
+        if (ball.rotationAngle > 360.0){
+            ball.rotationAngle -= 360.0;
+        }
     }
 }
 
@@ -549,6 +655,8 @@ int main(int argc, char** argv){
     up_x = up_vector.x;
     up_y = up_vector.y;
     up_z = up_vector.z;
+
+    srand(555); // Seed for random number generation
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
