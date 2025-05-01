@@ -5,7 +5,7 @@
 
 #define pi 3.1416
 
-enum rotation_3d {yaw, pitch_look_at, pitch_up, roll};
+enum rotation_3d {yaw, pitch, roll};
 
 // Camera position and orientation
 double eye_x = 4, eye_y = 4, eye_z = 4;          // Camera position point coordinates
@@ -58,33 +58,30 @@ vector_3d normalize(vector_3d a){
     return result;
 }
 
-vector_3d rotate(vector_3d vector, vector_3d axis, double angle){
-    double radian_angle = angle * pi /180.0;
+vector_3d rotate(vector_3d v, vector_3d k, double angle){
     /*
-      Rodrigues' rotation formula
-      ----------------------------
-      v_rot = v cos(theta) + (k x v) sin(theta) + k (k . v) (1- cos(theta)) 
-
-      where, k is the unit vector along the axis of rotation
-             v is the vector to be rotated
-             theta is the angle of rotation in radians
-             v_rot is the rotated vector
+        Rodrigues' rotation formula
+        ----------------------------
+        v_rot = v cos(theta) + (k x v) sin(theta) + k (k . v) (1- cos(theta)) 
+        
+        where, 
+            k     = the unit vector along the axis of rotation
+            v     = the vector to be rotated
+            theta = the angle of rotation in radians
+            v_rot = the rotated vector
     */
-
-    vector_3d k = normalize(axis);
-    vector_3d first_term = multiply(vector, cos(radian_angle));
-    vector_3d second_term = multiply(cross(k, vector), sin(radian_angle));
-    vector_3d third_term = multiply(k, dot(k, vector) * (1 - cos(radian_angle)));
+   
+    double theta = angle * pi /180.0;
+    
+    vector_3d first_term = multiply(v, cos(theta));
+    vector_3d second_term = multiply(cross(k, v), sin(theta));
+    vector_3d third_term = multiply(k, dot(k, v) * (1 - cos(theta)));
 
     vector_3d v_rot = add(first_term, second_term, third_term);
     
     return v_rot;
 }
 
-vector_3d getUpVector(){
-    vector_3d vector = {up_x, up_y, up_z};
-    return vector;
-}
 vector_3d getLookAtVector(){
     vector_3d vector = {
         center_x - eye_x,
@@ -94,33 +91,42 @@ vector_3d getLookAtVector(){
     return vector;
 }
 vector_3d getRightVector(){
-    vector_3d up_vector = getUpVector();
+    vector_3d up_vector = {up_x, up_y, up_z};
     vector_3d look_at_vector = getLookAtVector();
     vector_3d right_vector = cross(look_at_vector, up_vector);
     return right_vector;
 }
+
+vector_3d getUpVector(){
+    // The up vector created with the up coordinates might not be orthogonal with the look_at_vector
+    // So, we need to calculate the up vector using the right vector and look_at_vector
+    vector_3d look_at_vector = getLookAtVector();
+    vector_3d right_vector = getRightVector();
+    vector_3d up_vector = cross(right_vector, look_at_vector);
+    return up_vector;
+}
+
 vector_3d getRotatedVector(enum rotation_3d type, double angle){
     vector_3d vector;
     vector_3d axis;
     switch(type){
         case yaw:{
             vector = getLookAtVector();
-            axis = getUpVector();
+            axis = normalize(getUpVector());
+            // Updating the up coordinates to correspond to the actual up vector
+            // up_x = axis.x;
+            // up_y = axis.y;
+            // up_z = axis.z;
             break;
         }
-        case pitch_look_at:{
+        case pitch:{
             vector = getLookAtVector();
-            axis = getRightVector();
-            break;
-        }
-        case pitch_up:{
-            vector = getUpVector();
-            axis = getRightVector();
+            axis = normalize(getRightVector());
             break;
         }
         case roll:{
             vector = getUpVector();
-            axis = getLookAtVector();
+            axis = normalize(getLookAtVector());
             break;
         }
         default:{
@@ -191,14 +197,9 @@ void drawCube(){
         glVertex3f(1.0, 1.0, -1.0);
         glVertex3f(-1.0, 1.0, -1.0);
 
-        // // Bottom Face
-        // glColor3f(1.0, 0.5, 0.0); // Orange
-        // glVertex3f(1.0, -1.0, 1.0);
-        // glVertex3f(1.0, -1.0, -1.0);
-        // glVertex3f(-1.0, -1.0, -1.0);
-        // glVertex3f(-1.0, -1.0, 1.0);
     }glEnd();
 
+    // Bottom Face
     drawBottomFace();
 }
 
@@ -210,17 +211,10 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             // look left / yaw left 
             printf("Look Left\n");
             vector_3d rotated_look_at_vector = getRotatedVector(yaw, shift_angle);
+            
             center_x = eye_x + rotated_look_at_vector.x;
             center_y = eye_y + rotated_look_at_vector.y;
             center_z = eye_z + rotated_look_at_vector.z;
-
-            vector_3d right_vector = getRightVector();
-            vector_3d up_vector = cross(right_vector, rotated_look_at_vector);
-            up_vector = normalize(up_vector);
-            
-            up_x = up_vector.x;
-            up_y = up_vector.y;
-            up_z = up_vector.z;
 
             break;
         }
@@ -228,51 +222,48 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             // look right / yaw right 
             printf("Look Right\n");
             vector_3d rotated_look_at_vector = getRotatedVector(yaw, -shift_angle);
+            
             center_x = eye_x + rotated_look_at_vector.x;
             center_y = eye_y + rotated_look_at_vector.y;
             center_z = eye_z + rotated_look_at_vector.z;
-
-            vector_3d right_vector = getRightVector();
-            vector_3d up_vector = cross(right_vector, rotated_look_at_vector);
-            up_vector = normalize(up_vector);
-            
-            up_x = up_vector.x;
-            up_y = up_vector.y;
-            up_z = up_vector.z;
 
             break;
         }
         case '3':{
             // look up / pitch up
             printf("Look Up\n");
-            vector_3d rotated_look_at_vector = getRotatedVector(pitch_look_at, shift_angle);
-            vector_3d rotated_up_vector = getRotatedVector(pitch_up, shift_angle);
-            rotated_up_vector = normalize(rotated_up_vector);
-
+            vector_3d rotated_look_at_vector = getRotatedVector(pitch, shift_angle);
+            
             center_x = eye_x + rotated_look_at_vector.x;
             center_y = eye_y + rotated_look_at_vector.y;
             center_z = eye_z + rotated_look_at_vector.z;
+            
+            // Updating the up vector since look_at_vector has changed
+            vector_3d up_vector = getUpVector();
+            up_vector = normalize(up_vector);
 
-            up_x = rotated_up_vector.x;
-            up_y = rotated_up_vector.y;
-            up_z = rotated_up_vector.z;
+            up_x = up_vector.x;
+            up_y = up_vector.y;
+            up_z = up_vector.z;
             
             break;
         }
         case '4':{
             // look down / pitch down
             printf("Look Down\n");
-            vector_3d rotated_look_at_vector = getRotatedVector(pitch_look_at, -shift_angle);
-            vector_3d rotated_up_vector = getRotatedVector(pitch_up, -shift_angle);
-            rotated_up_vector = normalize(rotated_up_vector);
-
+            vector_3d rotated_look_at_vector = getRotatedVector(pitch, -shift_angle);
+            
             center_x = eye_x + rotated_look_at_vector.x;
             center_y = eye_y + rotated_look_at_vector.y;
             center_z = eye_z + rotated_look_at_vector.z;
+            
+            // Updating the up vector since look_at_vector has changed
+            vector_3d up_vector = getUpVector();
+            up_vector = normalize(up_vector);
 
-            up_x = rotated_up_vector.x;
-            up_y = rotated_up_vector.y;
-            up_z = rotated_up_vector.z;
+            up_x = up_vector.x;
+            up_y = up_vector.y;
+            up_z = up_vector.z;
             
             break;
         }
@@ -324,8 +315,7 @@ void SpecialKeyListener(int key, int x, int y){
         case GLUT_KEY_UP:{
             // move forward
             printf("Move Forward\n");
-            vector_3d look_at_vector = getLookAtVector();
-            look_at_vector = normalize(look_at_vector);
+            vector_3d look_at_vector = normalize(getLookAtVector());
 
             eye_x += look_at_vector.x * shift_value;
             eye_y += look_at_vector.y * shift_value;
@@ -339,8 +329,7 @@ void SpecialKeyListener(int key, int x, int y){
         case GLUT_KEY_DOWN:{
             // move backward
             printf("Move Backward\n");
-            vector_3d look_at_vector = getLookAtVector();
-            look_at_vector = normalize(look_at_vector);
+            vector_3d look_at_vector = normalize(getLookAtVector());
 
             eye_x -= look_at_vector.x * shift_value;
             eye_y -= look_at_vector.y * shift_value;
@@ -354,31 +343,59 @@ void SpecialKeyListener(int key, int x, int y){
         case GLUT_KEY_LEFT:{
             // move left
             printf("Move Left\n");
-            eye_x -= shift_value;
-            center_x -= shift_value;
+            vector_3d right_vector = normalize(getRightVector());
+
+            eye_x -= right_vector.x * shift_value;
+            eye_y -= right_vector.y * shift_value;
+            eye_z -= right_vector.z * shift_value;
+
+            center_x -= right_vector.x * shift_value;
+            center_y -= right_vector.y * shift_value;
+            center_z -= right_vector.z * shift_value;
             break;
         }
         case GLUT_KEY_RIGHT:{
             // move right
             printf("Move Right\n");
-            eye_x += shift_value;
-            center_x += shift_value;
+            vector_3d right_vector = normalize(getRightVector());
+
+            eye_x += right_vector.x * shift_value;
+            eye_y += right_vector.y * shift_value;
+            eye_z += right_vector.z * shift_value;
+
+            center_x += right_vector.x * shift_value;
+            center_y += right_vector.y * shift_value;
+            center_z += right_vector.z * shift_value;
             break;
         }
 
         case GLUT_KEY_PAGE_UP:{
             // move up
             printf("Move Up\n");
-            eye_y += shift_value;
-            center_y += shift_value;
+            vector_3d up_vector = normalize(getUpVector());
+
+            eye_x += up_vector.x * shift_value;
+            eye_y += up_vector.y * shift_value;
+            eye_z += up_vector.z * shift_value;
+
+            center_x += up_vector.x * shift_value;
+            center_y += up_vector.y * shift_value;
+            center_z += up_vector.z * shift_value;
             break;
         }
 
         case GLUT_KEY_PAGE_DOWN:{
             // move down
             printf("Move Down\n");
-            eye_y -= shift_value;
-            center_y -= shift_value;
+            vector_3d up_vector = normalize(getUpVector());
+
+            eye_x -= up_vector.x * shift_value;
+            eye_y -= up_vector.y * shift_value;
+            eye_z -= up_vector.z * shift_value;
+
+            center_x -= up_vector.x * shift_value;
+            center_y -= up_vector.y * shift_value;
+            center_z -= up_vector.z * shift_value;
             break;
         }
 
@@ -397,7 +414,7 @@ void display(){
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-
+    
     // Although, eye and center are points, up is a vector. 
     // So, look_at_vector = {center_x - eye_x, center_y - eye_y, center_z - eye_z}
     // up_vector = {up_x, up_y, up_z}
@@ -406,7 +423,7 @@ void display(){
         center_x,center_y,center_z, // Look-at point
         up_x,up_y,up_z // Up vector
     );
-
+    
     drawCube();
 
     glutSwapBuffers();
@@ -436,6 +453,12 @@ int main(int argc, char** argv){
     glutInitWindowPosition(1300,500);
 
     glutCreateWindow("Bouncing Ball");
+
+    // Updating the up coordinates to correspond to the actual up vector
+    vector_3d up_vector = normalize(getUpVector());
+    up_x = up_vector.x;
+    up_y = up_vector.y;
+    up_z = up_vector.z;
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
