@@ -324,15 +324,31 @@ void SpecialKeyListener(int key, int x, int y){
         case GLUT_KEY_UP:{
             // move forward
             printf("Move Forward\n");
-            eye_z -= shift_value;
-            center_z -= shift_value;
+            vector_3d look_at_vector = getLookAtVector();
+            look_at_vector = normalize(look_at_vector);
+
+            eye_x += look_at_vector.x * shift_value;
+            eye_y += look_at_vector.y * shift_value;
+            eye_z += look_at_vector.z * shift_value;
+
+            center_x += look_at_vector.x * shift_value;
+            center_y += look_at_vector.y * shift_value;
+            center_z += look_at_vector.z * shift_value;
             break;
         }
         case GLUT_KEY_DOWN:{
             // move backward
             printf("Move Backward\n");
-            eye_z += shift_value;
-            center_z += shift_value;
+            vector_3d look_at_vector = getLookAtVector();
+            look_at_vector = normalize(look_at_vector);
+
+            eye_x -= look_at_vector.x * shift_value;
+            eye_y -= look_at_vector.y * shift_value;
+            eye_z -= look_at_vector.z * shift_value;
+
+            center_x -= look_at_vector.x * shift_value;
+            center_y -= look_at_vector.y * shift_value;
+            center_z -= look_at_vector.z * shift_value;
             break;
         }
         case GLUT_KEY_LEFT:{
