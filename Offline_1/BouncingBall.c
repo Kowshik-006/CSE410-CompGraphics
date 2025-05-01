@@ -2,7 +2,7 @@
 #include<stdlib.h>
 #include<math.h>
 #include<GL/glut.h>
-
+// #declare MediumWood = color red 0.65 green 0.50 blue 0.39
 #define pi 3.1416
 
 enum rotation_3d {yaw, pitch, roll};
@@ -15,6 +15,22 @@ double up_x = 0, up_y = 1, up_z = 0;             // Up vector coordinates
 typedef struct{
     double x, y, z;
 }vector_3d;
+
+typedef struct{
+    double radius;
+    double x, y, z;
+    double velocity_x, velocity_y, velocity_z;
+}Ball;
+
+Ball ball = {
+             0.1,
+             0.0, 0.9, 0.0, 
+             0.3, 0.0, 0.4 
+            };
+
+double gravity = -0.98;
+double restitution = 0.75;
+double deltaTime = 0.016; // 60 FPS
 
 vector_3d add(vector_3d a, vector_3d b, vector_3d c){
     vector_3d result = {
@@ -444,6 +460,12 @@ void display(){
     
     drawCube();
 
+    glPushMatrix();
+    glTranslatef(ball.x, ball.y, ball.z);
+    glColor3f(0.65, 0.5, 0.39); // Wood ball
+    glutSolidSphere(ball.radius, 32, 32);
+    glPopMatrix();
+
     glutSwapBuffers();
 }
 
@@ -460,6 +482,56 @@ void reshape(int width, int height)
 
     // 45-degree field of view, aspect ratio, near and far clipping planes
     gluPerspective(60.0f, aspect, 0.1f, 100.0f);
+}
+
+void updateBall() {
+    // Integrate
+    ball.velocity_y += gravity * deltaTime;
+    ball.x += ball.velocity_x * deltaTime;
+    ball.y += ball.velocity_y * deltaTime;
+    ball.z += ball.velocity_z * deltaTime;
+
+    float minBound = -1.0f + ball.radius;
+    float maxBound =  1.0f - ball.radius;
+
+    // Floor bounce
+    if (ball.y < minBound) {
+        ball.y = minBound;
+        ball.velocity_y = -ball.velocity_y * restitution;
+        if (fabs(ball.velocity_y) < 0.01f) ball.velocity_y = 0;
+    }
+
+    // Ceiling
+    if (ball.y > maxBound) {
+        ball.y = maxBound;
+        ball.velocity_y = -ball.velocity_y * restitution;
+    }
+
+    // Side walls (X)
+    if (ball.x < minBound) {
+        ball.x = minBound;
+        ball.velocity_x = -ball.velocity_x * restitution;
+    }
+    if (ball.x > maxBound) {
+        ball.x = maxBound;
+        ball.velocity_x = -ball.velocity_x * restitution;
+    }
+
+    // Front/back walls (Z)
+    if (ball.z < minBound) {
+        ball.z = minBound;
+        ball.velocity_z = -ball.velocity_z * restitution;
+    }
+    if (ball.z > maxBound) {
+        ball.z = maxBound;
+        ball.velocity_z = -ball.velocity_z * restitution;
+    }
+}
+
+void timer(int) {
+    updateBall();
+    glutPostRedisplay();
+    glutTimerFunc(16, timer, 0); // ~60Hz
 }
 
 
@@ -480,6 +552,7 @@ int main(int argc, char** argv){
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
+    glutTimerFunc(0, timer, 0);
     glutKeyboardFunc(AlphaNumericKeyListener);
     glutSpecialFunc(SpecialKeyListener);
     glClearColor(0.0, 0.0, 0.0, 1.0);
