@@ -8,7 +8,7 @@
 enum rotation_3d {yaw, pitch_look_at, pitch_up, roll};
 
 // Camera position and orientation
-double eye_x = 4, eye_y = 0, eye_z = 4;          // Camera position coordinates
+double eye_x = 4, eye_y = 4, eye_z = 4;          // Camera position point coordinates
 double center_x = 0, center_y = 0, center_z = 0; // Look-at point coordinates
 double up_x = 0, up_y = 1, up_z = 0;             // Up vector coordinates
 
@@ -223,13 +223,15 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             printf("Look Up\n");
             vector_3d rotated_look_at_vector = getRotatedVector(pitch_look_at, shift_angle);
             vector_3d rotated_up_vector = getRotatedVector(pitch_up, shift_angle);
+            rotated_up_vector = normalize(rotated_up_vector);
+
             center_x = eye_x + rotated_look_at_vector.x;
             center_y = eye_y + rotated_look_at_vector.y;
             center_z = eye_z + rotated_look_at_vector.z;
 
-            up_x = eye_x + rotated_up_vector.x;
-            up_y = eye_y + rotated_up_vector.y;
-            up_z = eye_z + rotated_up_vector.z;
+            up_x = rotated_up_vector.x;
+            up_y = rotated_up_vector.y;
+            up_z = rotated_up_vector.z;
             
             break;
         }
@@ -238,32 +240,36 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             printf("Look Down\n");
             vector_3d rotated_look_at_vector = getRotatedVector(pitch_look_at, -shift_angle);
             vector_3d rotated_up_vector = getRotatedVector(pitch_up, -shift_angle);
+            rotated_up_vector = normalize(rotated_up_vector);
+
             center_x = eye_x + rotated_look_at_vector.x;
             center_y = eye_y + rotated_look_at_vector.y;
             center_z = eye_z + rotated_look_at_vector.z;
 
-            up_x = eye_x + rotated_up_vector.x;
-            up_y = eye_y + rotated_up_vector.y;
-            up_z = eye_z + rotated_up_vector.z;
+            up_x = rotated_up_vector.x;
+            up_y = rotated_up_vector.y;
+            up_z = rotated_up_vector.z;
             
             break;
         }
         case '5':{
             // tilt clockwise / roll clockwise
-            printf("Roll Clockwise\n");
+            printf("Tilt Clockwise\n");
             vector_3d rotated_up_vector = getRotatedVector(roll, -shift_angle);
-            up_x = eye_x + rotated_up_vector.x;
-            up_y = eye_y + rotated_up_vector.y;
-            up_z = eye_z + rotated_up_vector.z;
+            rotated_up_vector = normalize(rotated_up_vector);
+            up_x = rotated_up_vector.x;
+            up_y = rotated_up_vector.y;
+            up_z = rotated_up_vector.z;
             break;
         }
         case '6':{
             // tilt counter clockwise / roll counter clockwise
-            printf("Roll Counter Clockwise\n");
+            printf("Tilt Counter Clockwise\n");
             vector_3d rotated_up_vector = getRotatedVector(roll, shift_angle);
-            up_x = eye_x + rotated_up_vector.x;
-            up_y = eye_y + rotated_up_vector.y;
-            up_z = eye_z + rotated_up_vector.z;
+            rotated_up_vector = normalize(rotated_up_vector);
+            up_x = rotated_up_vector.x;
+            up_y = rotated_up_vector.y;
+            up_z = rotated_up_vector.z;
             break;
         }
         case 'w':{
