@@ -290,13 +290,31 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
         case 'w':{
             // move upward without changing the reference point
             printf("Move Upward Without Changing the Reference Point\n");
-            eye_y += shift_value; 
+            vector_3d up_vector = normalize(getUpVector());
+            eye_x += up_vector.x * shift_value;
+            eye_y += up_vector.y * shift_value;
+            eye_z += up_vector.z * shift_value;
+
+            // Updating the up vector coordinates since look_at_vector has changed
+            up_vector = normalize(getUpVector());
+            up_x = up_vector.x;
+            up_y = up_vector.y;
+            up_z = up_vector.z;
             break;
         }
         case 's':{
             // move downward without changing the reference point
             printf("Move Downward Without Changing the Reference Point\n");
-            eye_y -= shift_value; 
+            vector_3d up_vector = normalize(getUpVector());
+            eye_x -= up_vector.x * shift_value;
+            eye_y -= up_vector.y * shift_value;
+            eye_z -= up_vector.z * shift_value;
+
+            // Updating the up vector coordinates since look_at_vector has changed
+            up_vector = normalize(getUpVector());
+            up_x = up_vector.x;
+            up_y = up_vector.y;
+            up_z = up_vector.z;
             break;
         }
         default:{
