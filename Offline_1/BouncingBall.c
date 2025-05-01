@@ -8,7 +8,7 @@
 enum rotation_3d {yaw, pitch_look_at, pitch_up, roll};
 
 // Camera position and orientation
-double eye_x = 4, eye_y = 4, eye_z = 4;          // Camera position coordinates
+double eye_x = 4, eye_y = 0, eye_z = 4;          // Camera position coordinates
 double center_x = 0, center_y = 0, center_z = 0; // Look-at point coordinates
 double up_x = 0, up_y = 1, up_z = 0;             // Up vector coordinates
 
@@ -82,11 +82,7 @@ vector_3d rotate(vector_3d vector, vector_3d axis, double angle){
 }
 
 vector_3d getUpVector(){
-    vector_3d vector = {
-        up_x - eye_x,
-        up_y - eye_y,
-        up_z - eye_z
-    };
+    vector_3d vector = {up_x, up_y, up_z};
     return vector;
 }
 vector_3d getLookAtVector(){
@@ -154,10 +150,10 @@ void drawCube(){
 
         // Back Face
         glColor3f(1.0, 1.0, 0.0); // Yellow
-        glColor3f(1.0, 1.0, -1.0);
-        glColor3f(-1.0, 1.0, -1.0);
-        glColor3f(-1.0, -1.0, -1.0);
-        glColor3f(1.0, -1.0, -1.0);
+        glVertex3f(1.0, 1.0, -1.0);
+        glVertex3f(-1.0, 1.0, -1.0);
+        glVertex3f(-1.0, -1.0, -1.0);
+        glVertex3f(1.0, -1.0, -1.0);
 
         // Left Face
         glColor3f(1.0, 0.0, 1.0);
@@ -189,19 +185,37 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
         case '1':{
             // look left / yaw left 
             printf("Look Left\n");
-            vector_3d rotated_look_at_vector = getRotatedVector(yaw, -shift_angle);
+            vector_3d rotated_look_at_vector = getRotatedVector(yaw, shift_angle);
             center_x = eye_x + rotated_look_at_vector.x;
             center_y = eye_y + rotated_look_at_vector.y;
             center_z = eye_z + rotated_look_at_vector.z;
+
+            vector_3d right_vector = getRightVector();
+            vector_3d up_vector = cross(right_vector, rotated_look_at_vector);
+            up_vector = normalize(up_vector);
+            
+            up_x = up_vector.x;
+            up_y = up_vector.y;
+            up_z = up_vector.z;
+
             break;
         }
         case '2':{
             // look right / yaw right 
             printf("Look Right\n");
-            vector_3d rotated_look_at_vector = getRotatedVector(yaw, shift_angle);
+            vector_3d rotated_look_at_vector = getRotatedVector(yaw, -shift_angle);
             center_x = eye_x + rotated_look_at_vector.x;
             center_y = eye_y + rotated_look_at_vector.y;
             center_z = eye_z + rotated_look_at_vector.z;
+
+            vector_3d right_vector = getRightVector();
+            vector_3d up_vector = cross(right_vector, rotated_look_at_vector);
+            up_vector = normalize(up_vector);
+            
+            up_x = up_vector.x;
+            up_y = up_vector.y;
+            up_z = up_vector.z;
+
             break;
         }
         case '3':{
@@ -338,6 +352,9 @@ void display(){
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
+    // Although, eye and center are points, up is a vector. 
+    // So, look_at_vector = {center_x - eye_x, center_y - eye_y, center_z - eye_z}
+    // up_vector = {up_x, up_y, up_z}
     gluLookAt(
         eye_x,eye_y,eye_z, // Camera position
         center_x,center_y,center_z, // Look-at point
