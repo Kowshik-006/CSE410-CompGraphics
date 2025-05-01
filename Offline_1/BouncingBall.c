@@ -131,7 +131,29 @@ vector_3d getRotatedVector(enum rotation_3d type, double angle){
     vector_3d rotated_vector = rotate(vector, axis, angle);
     return rotated_vector;
 }
-
+void drawBottomFace(){
+    int is_white = 1;
+    for(double i = -1; i <= 0.9; i += 0.1){
+        for(double j = -1; j <= 0.9; j += 0.1){
+            if(is_white){
+                // white
+                glColor3f(1.0, 1.0, 1.0);
+            }
+            else{
+                // black
+                glColor3f(0.0, 0.0, 0.0);
+            }
+            glBegin(GL_QUADS);{
+                glVertex3f(i, -1, j);
+                glVertex3f(i + 0.1, -1, j);
+                glVertex3f(i + 0.1, -1, j + 0.1);
+                glVertex3f(i, -1, j + 0.1);
+            }glEnd();
+            is_white = !is_white;
+        }
+        is_white = !is_white;
+    }
+}
 void drawCube(){
     glBegin(GL_QUADS);{
         // Front Face
@@ -169,13 +191,15 @@ void drawCube(){
         glVertex3f(1.0, 1.0, -1.0);
         glVertex3f(-1.0, 1.0, -1.0);
 
-        // Bottom Face
-        glColor3f(1.0, 0.5, 0.0); // Orange
-        glVertex3f(1.0, -1.0, 1.0);
-        glVertex3f(1.0, -1.0, -1.0);
-        glVertex3f(-1.0, -1.0, -1.0);
-        glVertex3f(-1.0, -1.0, 1.0);
+        // // Bottom Face
+        // glColor3f(1.0, 0.5, 0.0); // Orange
+        // glVertex3f(1.0, -1.0, 1.0);
+        // glVertex3f(1.0, -1.0, -1.0);
+        // glVertex3f(-1.0, -1.0, -1.0);
+        // glVertex3f(-1.0, -1.0, 1.0);
     }glEnd();
+
+    drawBottomFace();
 }
 
 void AlphaNumericKeyListener(unsigned char key, int x, int y){
