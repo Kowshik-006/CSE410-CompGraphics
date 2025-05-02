@@ -366,20 +366,30 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             if(simulate){
                 return;
             }
-            gravity -= 0.02;
-            printf("Gravity increased to %lf\n", gravity);
+            if(ball.velocity.y > 0.0){
+                ball.velocity.y += 0.02;
+            }
+            else{
+                ball.velocity.y -= 0.02;
+            }
+            printf("Ball speed increased\n");
             break;
         }
         case '-':{
             if(simulate){
                 return;
             }
-            if(gravity > -0.01){
-                printf("Gravity already at minimum\n");
+            if(fabs(ball.velocity.y) < 0.01){
+                printf("Cannot decrease the speed further\n");
+                return;
+            }
+            if(ball.velocity.y > 0.0){
+                ball.velocity.y -= 0.02;
+                printf("Ball speed decreased\n");
             }
             else{
-                gravity += 0.02;
-                printf("Gravity decreased to %lf\n", gravity);
+                ball.velocity.y += 0.02;
+                printf("Ball velocity decreased\n");
             }
             break;
     }
@@ -504,6 +514,43 @@ void SpecialKeyListener(int key, int x, int y){
     glutPostRedisplay();
 }
 
+void drawBall(double radius, int slices, int stacks) {
+    int brown = 0;
+    
+    for (int i = 0; i < stacks; ++i) {
+        // Alternate starting color for each stack
+        brown = !brown;
+        
+        glBegin(GL_QUAD_STRIP);
+        for (int j = 0; j <= slices; ++j) {
+            if (brown) glColor3f(0.63, 0.32, 0.18);  // Brown
+            else glColor3f(1.0, 1.0, 1.0);        // White
+            
+            double theta = 2.0 * pi * j / slices;  // Longitude
+            double phi = pi * i / stacks;          // Latitude
+            
+            double x = radius * cos(theta) * sin(phi);
+            double y = radius * sin(theta) * sin(phi);
+            double z = radius * cos(phi);
+            
+            glVertex3f(x, y, z);
+            
+            if (brown) glColor3f(1.0, 1.0, 1.0);  // White
+            else glColor3f(0.63, 0.32, 0.18);      // Brown
+            
+            double phi_next = (i + 1) * pi / stacks;
+            x = radius * cos(theta) * sin(phi_next);
+            y = radius * sin(theta) * sin(phi_next);
+            z = radius * cos(phi_next);
+            
+            glVertex3f(x, y, z);
+            
+            brown = !brown;
+        }
+        glEnd();
+    }
+}
+
 
 void display(){
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -524,8 +571,9 @@ void display(){
     glPushMatrix();
     glTranslatef(ball.position.x, ball.position.y, ball.position.z);
     glRotatef(ball.rotationAngle, ball.rotationAxis.x, ball.rotationAxis.y, ball.rotationAxis.z);
-    glColor3f(0.65, 0.5, 0.39); // Wooden ball
-    glutSolidSphere(ball.radius, 32, 32);
+    // glColor3f(0.65, 0.5, 0.39); // Wooden ball
+    // glutSolidSphere(ball.radius, 32, 32);
+    drawBall(ball.radius, 32, 32); // Patterned sphere
     glPopMatrix();
 
     if (showVelocityArrow) {
