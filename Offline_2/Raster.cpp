@@ -137,7 +137,7 @@ Matrix pointToMatrix(Point& p){
 
 Point eye, look;
 Vector up;
-float fovY, aspectRatio, zNear, zFar;
+float fovY, aspectRatio, near, far;
 
 
 Matrix getIdentityMatrix(){
@@ -159,7 +159,7 @@ void basic_setup(ifstream& scene_file){
     scene_file  >> eye.x >> eye.y >> eye.z
                 >> look.x >> look.y >> look.z
                 >> up.x >> up.y >> up.z
-                >> fovY >> aspectRatio >> zNear >> zFar;
+                >> fovY >> aspectRatio >> near >> far;
 
 }
 
@@ -298,7 +298,14 @@ void perform_transformations(ifstream& scene_file, ofstream& stage1_file){
     
 }
 
-Matrix getViewTransformationMatrix(Vector& l, Vector& r, Vector& u){
+Matrix getViewTransformationMatrix(){
+    Vector l = look - eye;
+    l.normalize();
+    Vector r = l ^ up;
+    r.normalize();
+    Vector u = r ^ l;
+
+    u.normalize();
     Matrix T(4,4);
     for(int i=0; i<4; i++){
         T.set(i,i,1);
@@ -321,25 +328,42 @@ Matrix getViewTransformationMatrix(Vector& l, Vector& r, Vector& u){
     return V;
 }
 
-void transformPoints(Matrix& V, ifstream& stage1_file, ofstream& stage2_file){
-    stage2_file << fixed << setprecision(7);
+Matrix getProjectionTransformationMatrix(){
+    float fovX = fovY * aspectRatio;
+    float t = near * tan(fovY * deg2rad / 2);
+    float r = near * tan(fovX * deg2rad / 2);
+
+    Matrix P(4,4);
+    P.set(0,0,near/r);
+    P.set(1,1,near/t);
+    P.set(2,2,-(far + near)/(far - near));
+    P.set(2,3,-(2 * far * near)/(far - near));
+    P.set(3,2,-1);
+
+    return P;
+}
+
+void transformPoints(Matrix& transformMatrix, ifstream& input_file, ofstream& output_file){
+    output_file << fixed << setprecision(7);
     while(true){
         for(int i=0; i<3; i++){
             Point p;
-            stage1_file >> p.x >> p.y >> p.z;
-            if(stage1_file.eof()){
+            input_file >> p.x >> p.y >> p.z;
+            if(input_file.eof()){
                 return;
             }
-            Matrix transformed_p = V * pointToMatrix(p);
-            p.x = properValue(transformed_p.get(0,0));
-            p.y = properValue(transformed_p.get(1,0));
-            p.z = properValue(transformed_p.get(2,0));
+            Matrix transformed_p = transformMatrix * pointToMatrix(p);
+            p.x = properValue(transformed_p.get(0,0)/transformed_p.get(3,0));
+            p.y = properValue(transformed_p.get(1,0)/transformed_p.get(3,0));
+            p.z = properValue(transformed_p.get(2,0)/transformed_p.get(3,0));
     
-            stage2_file << p.x << " " << p.y << " " << p.z << endl;
+            output_file << p.x << " " << p.y << " " << p.z << endl;
         }
-        stage2_file << endl;
+        output_file << endl;
     }
 }
+
+
     
 
 
@@ -371,6 +395,7 @@ int main(int argc, char** argv){
     }
     
     // Stage 1
+
     basic_setup(scene_file);
     perform_transformations(scene_file, stage1_file_output);
     
@@ -380,13 +405,6 @@ int main(int argc, char** argv){
     cout << "Stage 1 completed. Output written to "<< stage1_file_path << endl;
 
     // Stage 2
-    
-    Vector l = look - eye;
-    l.normalize();
-    Vector r = l ^ up;
-    r.normalize();
-    Vector u = r ^ l;
-    u.normalize();
 
     ifstream stage1_file_input(stage1_file_path);
     ofstream stage2_file_output(stage2_file_path);
@@ -396,12 +414,31 @@ int main(int argc, char** argv){
         exit(1);
     }
 
-    Matrix V = getViewTransformationMatrix(l, r, u);
+    Matrix V = getViewTransformationMatrix();
 
     transformPoints(V, stage1_file_input, stage2_file_output);
+    
     stage1_file_input.close();
     stage2_file_output.close();
+    
     cout << "Stage 2 completed. Output written to "<< stage2_file_path << endl;
+
+    // Stage 3
+
+    ifstream stage2_file_input(stage2_file_path);
+    ofstream stage3_file_output(stage3_file_path);
+
+    if(!stage2_file_input.is_open() || !stage3_file_output.is_open()){   
+        cerr << "Unable to open required files for stage 3" << endl;
+        exit(1);
+    }
+
+    Matrix P = getProjectionTransformationMatrix();
+
+    transformPoints(P, stage2_file_input, stage3_file_output);
+    stage2_file_input.close();
+    stage3_file_output.close();
+    cout << "Stage 3 completed. Output written to "<< stage3_file_path << endl;
 
     return 0;
 }
