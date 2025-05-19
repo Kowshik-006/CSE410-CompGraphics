@@ -54,6 +54,10 @@ class Point{
         return Point(x + other.x, y + other.y, z + other.z);
     }
 
+    Point operator-(const Point& other) const {
+        return Point(x - other.x, y - other.y, z - other.z);
+    }
+
     void normalize(){
         float length = sqrt((x * x) + (y * y) + (z * z));
         if(length == 0){
@@ -64,6 +68,9 @@ class Point{
         z /= length;
     }
 };
+
+// Vector and Point are represented in the same way
+typedef Point Vector;
 
 class Triangle{
     public:
@@ -128,7 +135,8 @@ Matrix pointToMatrix(Point& p){
     return m;
 }
 
-Point eye, look, up;
+Point eye, look;
+Vector up;
 float fovY, aspectRatio, zNear, zFar;
 
 
@@ -176,22 +184,22 @@ Matrix getScalingMatrix(float sx, float sy, float sz){
     return scaling;
 }
 
-Point rotateUsingRodrigues(Point p, float angle, Point& axis){
+Vector rotateUsingRodrigues(Vector p, float angle, Vector& axis){
     // point * point -> dot product
     // point ^ point -> cross product
     // point * scalar -> scalar multiplication
     // point + point -> vector addition
     angle = angle * deg2rad;
-    Point first_term = p * cos(angle);
-    Point second_term = axis * (axis * p) * (1 - cos(angle));
-    Point third_term = (axis ^ p) * sin(angle);
+    Vector first_term = p * cos(angle);
+    Vector second_term = axis * (axis * p) * (1 - cos(angle));
+    Vector third_term = (axis ^ p) * sin(angle);
     return first_term + second_term + third_term;
 }
 
-Matrix getRotationMatrix(float angle, Point& axis){
-    Point c1 = rotateUsingRodrigues(Point(1,0,0), angle, axis);
-    Point c2 = rotateUsingRodrigues(Point(0,1,0), angle, axis);
-    Point c3 = rotateUsingRodrigues(Point(0,0,1), angle, axis);
+Matrix getRotationMatrix(float angle, Vector& axis){
+    Vector c1 = rotateUsingRodrigues(Vector(1,0,0), angle, axis);
+    Vector c2 = rotateUsingRodrigues(Vector(0,1,0), angle, axis);
+    Vector c3 = rotateUsingRodrigues(Vector(0,0,1), angle, axis);
 
     Matrix rotation(4,4);
     rotation.set(0,0,c1.x);
@@ -250,7 +258,7 @@ void perform_transformations(ifstream& scene_file, ofstream& stage1_file){
             float angle, ax, ay, az;
             scene_file >> angle >> ax >> ay >> az;
 
-            Point axis = Point(ax, ay, az);
+            Vector axis = Vector(ax, ay, az);
             axis.normalize();
 
             Matrix rotation_matrix = getRotationMatrix(angle, axis);
@@ -287,8 +295,52 @@ void perform_transformations(ifstream& scene_file, ofstream& stage1_file){
         }
 
     }
-    stage1_file.close();
+    
 }
+
+Matrix getViewTransformationMatrix(Vector& l, Vector& r, Vector& u){
+    Matrix T(4,4);
+    for(int i=0; i<4; i++){
+        T.set(i,i,1);
+    }
+    T.set(0,3,-eye.x);
+    T.set(1,3,-eye.y);
+    T.set(2,3,-eye.z);
+
+    Matrix R(4,4);
+    for(int i=0; i<3; i++){
+        Vector v = i == 0 ? r : (i == 1 ? u : l*(-1));
+        for(int j=0; j<3; j++){
+            float value = j == 0 ? v.x : (j == 1 ? v.y : v.z);
+            R.set(i,j,value);
+        }
+    }
+    R.set(3,3,1);
+
+    Matrix V = R * T;
+    return V;
+}
+
+void transformPoints(Matrix& V, ifstream& stage1_file, ofstream& stage2_file){
+    stage2_file << fixed << setprecision(7);
+    while(true){
+        for(int i=0; i<3; i++){
+            Point p;
+            stage1_file >> p.x >> p.y >> p.z;
+            if(stage1_file.eof()){
+                return;
+            }
+            Matrix transformed_p = V * pointToMatrix(p);
+            p.x = properValue(transformed_p.get(0,0));
+            p.y = properValue(transformed_p.get(1,0));
+            p.z = properValue(transformed_p.get(2,0));
+    
+            stage2_file << p.x << " " << p.y << " " << p.z << endl;
+        }
+        stage2_file << endl;
+    }
+}
+    
 
 
 int main(int argc, char** argv){
@@ -305,24 +357,51 @@ int main(int argc, char** argv){
     string config_file_path = "./test_cases/" + to_string(choice) + "/config.txt";
     
     filesystem::create_directories("./output/"+to_string(choice));
+    
     string stage1_file_path = "./output/" + to_string(choice) + "/stage1.txt";
-    
+    string stage2_file_path = "./output/" + to_string(choice) + "/stage2.txt";
+    string stage3_file_path = "./output/" + to_string(choice) + "/stage3.txt";
+
     ifstream scene_file(scene_file_path);
-    ofstream stage1_file(stage1_file_path);
+    ofstream stage1_file_output(stage1_file_path);
     
-    if(scene_file.is_open()){
-        if(!stage1_file.is_open()){
-            cerr << "Unable to open stage1 file for writing." << endl;
-            return 1;
-        }
-        basic_setup(scene_file);
-        perform_transformations(scene_file, stage1_file);
-        cout << "Stage 1 completed. Output written to "<< stage1_file_path << endl;
-        scene_file.close();
+    if(!scene_file.is_open() || !stage1_file_output.is_open()){   
+        cerr << "Unable to open required files for stage 1" << endl;
+        exit(1);
     }
-    else{
-        cerr << "Unable to open scene file: " << scene_file_path << endl;
+    
+    // Stage 1
+    basic_setup(scene_file);
+    perform_transformations(scene_file, stage1_file_output);
+    
+    stage1_file_output.close();
+    scene_file.close();
+    
+    cout << "Stage 1 completed. Output written to "<< stage1_file_path << endl;
+
+    // Stage 2
+    
+    Vector l = look - eye;
+    l.normalize();
+    Vector r = l ^ up;
+    r.normalize();
+    Vector u = r ^ l;
+    u.normalize();
+
+    ifstream stage1_file_input(stage1_file_path);
+    ofstream stage2_file_output(stage2_file_path);
+
+    if(!stage1_file_input.is_open() || !stage2_file_output.is_open()){   
+        cerr << "Unable to open required files for stage 2" << endl;
+        exit(1);
     }
+
+    Matrix V = getViewTransformationMatrix(l, r, u);
+
+    transformPoints(V, stage1_file_input, stage2_file_output);
+    stage1_file_input.close();
+    stage2_file_output.close();
+    cout << "Stage 2 completed. Output written to "<< stage2_file_path << endl;
 
     return 0;
 }
