@@ -1,40 +1,26 @@
 #include<bits/stdc++.h>
 
-#define pi 3.1416
-#define deg2rad pi/180.0
+#define deg2rad M_PI/180.0
 
 #define epsilon 1e-4f
 
 using namespace std;
 
-float properValue(float value){
-    float abs_value = fabs(value);
-    if(abs_value < epsilon){
-        return 0;
-    }
-    float ceil_value = ceil(abs_value);
-    float delta = ceil_value - abs_value;
-    if(delta < epsilon){
-        return value >=0 ? ceil_value : -ceil_value;
-    }
-    return value;
-}
-
 class Point{
     public:
-    float x,y,z;
+    double x,y,z;
     Point(){
         x = 0;
         y = 0;
         z = 0;
     }
-    Point(float x, float y, float z){
+    Point(double x, double y, double z){
         this->x = x;
         this->y = y;
         this->z = z;
     }
     // this . other
-    float operator*(const Point& other) const {
+    double operator*(const Point& other) const {
         return (x * other.x) + (y * other.y) + (z * other.z);
     }
     // this x other
@@ -46,7 +32,7 @@ class Point{
         );
     }
     // this * scalar
-    Point operator*(float scalar) const {
+    Point operator*(double scalar) const {
         return Point(x * scalar, y * scalar, z * scalar);
     }
     // this + other
@@ -59,7 +45,7 @@ class Point{
     }
 
     void normalize(){
-        float length = sqrt((x * x) + (y * y) + (z * z));
+        double length = sqrt((x * x) + (y * y) + (z * z));
         if(length == 0){
             return;
         }
@@ -87,26 +73,26 @@ class Matrix{
     int rows;
     int cols;
     bool push_matrix = false;
-    vector<vector<float>> m;
+    vector<vector<double>> m;
     Matrix(int rows, int cols){
         this->rows = rows;
         this->cols = cols;
-        m.resize(rows, vector<float>(cols, 0.0f));
+        m.resize(rows, vector<double>(cols, 0.0));
     }
-    Matrix(vector<vector<float>> m){
+    Matrix(vector<vector<double>> m){
         this->rows = m.size();
         this->cols = m[0].size();
-        m.resize(rows, vector<float>(cols, 0.0f));
+        m.resize(rows, vector<double>(cols, 0.0));
         for(int i=0; i<rows; i++){
             for(int j=0; j<cols; j++){
                 this->m[i][j] = m[i][j];
             }
         }
     }
-    float get(int i, int j){
+    double get(int i, int j){
         return m[i][j];
     }
-    void set(int i, int j, float value){
+    void set(int i, int j, double value){
         m[i][j] = value;
     }
 
@@ -137,7 +123,7 @@ Matrix pointToMatrix(Point& p){
 
 Point eye, look;
 Vector up;
-float fovY, aspectRatio, near, far;
+double fovY, aspectRatio, near, far;
 
 
 Matrix getIdentityMatrix(){
@@ -163,7 +149,7 @@ void basic_setup(ifstream& scene_file){
 
 }
 
-Matrix getTranslationMatrix(float tx, float ty, float tz){
+Matrix getTranslationMatrix(double tx, double ty, double tz){
     Matrix translation(4,4);
     translation.set(0,0,1);
     translation.set(1,1,1);
@@ -175,7 +161,7 @@ Matrix getTranslationMatrix(float tx, float ty, float tz){
     return translation;
 }
 
-Matrix getScalingMatrix(float sx, float sy, float sz){
+Matrix getScalingMatrix(double sx, double sy, double sz){
     Matrix scaling(4,4);
     scaling.set(0,0,sx);
     scaling.set(1,1,sy);
@@ -184,7 +170,7 @@ Matrix getScalingMatrix(float sx, float sy, float sz){
     return scaling;
 }
 
-Vector rotateUsingRodrigues(Vector p, float angle, Vector& axis){
+Vector rotateUsingRodrigues(Vector p, double angle, Vector& axis){
     // point * point -> dot product
     // point ^ point -> cross product
     // point * scalar -> scalar multiplication
@@ -196,7 +182,7 @@ Vector rotateUsingRodrigues(Vector p, float angle, Vector& axis){
     return first_term + second_term + third_term;
 }
 
-Matrix getRotationMatrix(float angle, Vector& axis){
+Matrix getRotationMatrix(double angle, Vector& axis){
     Vector c1 = rotateUsingRodrigues(Vector(1,0,0), angle, axis);
     Vector c2 = rotateUsingRodrigues(Vector(0,1,0), angle, axis);
     Vector c3 = rotateUsingRodrigues(Vector(0,0,1), angle, axis);
@@ -229,33 +215,33 @@ void perform_transformations(ifstream& scene_file, ofstream& stage1_file){
         if(command == "triangle"){
             // cout<< "Reading triangle" << endl;
             for(int i=0;i<3;i++){
-                float x,y,z;
+                double x,y,z;
                 scene_file >> x >> y >> z;
                 Point p = Point(x,y,z);
                 Matrix transformed_p = matrix_stack.top() * pointToMatrix(p);
-                p.x = properValue(transformed_p.get(0,0));
-                p.y = properValue(transformed_p.get(1,0));
-                p.z = properValue(transformed_p.get(2,0));
+                p.x = transformed_p.get(0,0);
+                p.y = transformed_p.get(1,0);
+                p.z = transformed_p.get(2,0);
                 stage1_file << p.x << " " << p.y << " " << p.z << endl;
             }
             stage1_file << endl;
         }
         else if (command == "translate"){
-            float tx, ty, tz;
+            double tx, ty, tz;
             scene_file >> tx >> ty >> tz;
 
             Matrix translation_matrix = getTranslationMatrix(tx, ty, tz);
             matrix_stack.push(matrix_stack.top() * translation_matrix);
         }
         else if (command == "scale"){
-            float sx, sy, sz;
+            double sx, sy, sz;
             scene_file >> sx >> sy >> sz;
 
             Matrix scaling_matrix = getScalingMatrix(sx, sy, sz);
             matrix_stack.push(matrix_stack.top() * scaling_matrix);
         }
         else if (command == "rotate"){
-            float angle, ax, ay, az;
+            double angle, ax, ay, az;
             scene_file >> angle >> ax >> ay >> az;
 
             Vector axis = Vector(ax, ay, az);
@@ -318,7 +304,7 @@ Matrix getViewTransformationMatrix(){
     for(int i=0; i<3; i++){
         Vector v = i == 0 ? r : (i == 1 ? u : l*(-1));
         for(int j=0; j<3; j++){
-            float value = j == 0 ? v.x : (j == 1 ? v.y : v.z);
+            double value = j == 0 ? v.x : (j == 1 ? v.y : v.z);
             R.set(i,j,value);
         }
     }
@@ -329,9 +315,9 @@ Matrix getViewTransformationMatrix(){
 }
 
 Matrix getProjectionTransformationMatrix(){
-    float fovX = fovY * aspectRatio;
-    float t = near * tan(fovY * deg2rad / 2);
-    float r = near * tan(fovX * deg2rad / 2);
+    double fovX = fovY * aspectRatio;
+    double t = near * tan(fovY * deg2rad / 2);
+    double r = near * tan(fovX * deg2rad / 2);
 
     Matrix P(4,4);
     P.set(0,0,near/r);
@@ -353,9 +339,9 @@ void transformPoints(Matrix& transformMatrix, ifstream& input_file, ofstream& ou
                 return;
             }
             Matrix transformed_p = transformMatrix * pointToMatrix(p);
-            p.x = properValue(transformed_p.get(0,0)/transformed_p.get(3,0));
-            p.y = properValue(transformed_p.get(1,0)/transformed_p.get(3,0));
-            p.z = properValue(transformed_p.get(2,0)/transformed_p.get(3,0));
+            p.x = transformed_p.get(0,0)/transformed_p.get(3,0);
+            p.y = transformed_p.get(1,0)/transformed_p.get(3,0);
+            p.z = transformed_p.get(2,0)/transformed_p.get(3,0);
     
             output_file << p.x << " " << p.y << " " << p.z << endl;
         }
