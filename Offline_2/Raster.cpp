@@ -3,7 +3,7 @@
 
 #define deg2rad M_PI/180.0
 
-#define epsilon 1e-7f
+#define epsilon 1e-6
 
 using namespace std;
 
@@ -415,13 +415,6 @@ void config_setup(ifstream& config_file){
     top_y = -(screenBottom) - (dy/2);
     bottom_y = -top_y;
 
-    cout<< "dx = " << dx << endl;
-    cout<< "dy = " << dy << endl;
-    cout<< "left_x = " << left_x << endl;
-    cout<< "right_x = " << right_x << endl;
-    cout<< "top_y = " << top_y << endl;
-    cout<< "bottom_y = " << bottom_y << endl;
-
     zBuffer = new double*[screenHeight];
     for(int i=0; i<screenHeight; i++){
         zBuffer[i] = new double[screenWidth];
@@ -457,16 +450,47 @@ void readTriangles(ifstream& stage3_file){
 }
 
 double getArea(double x1, double y1, double x2, double y2, double x3, double y3){
-    return fabs((x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)) / 2.0);
+    return (x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)) / 2.0;
 }
 
-bool isPointInsideTriangle(double p_x, double p_y, const Triangle& t){
+bool get_zValue_if_point_inside_triangle(double p_x, double p_y, double& p_z, const Triangle& t){
     double area_ABC = getArea(t.p1.x, t.p1.y, t.p2.x, t.p2.y, t.p3.x, t.p3.y);
     double area_PAB = getArea(p_x, p_y, t.p1.x, t.p1.y, t.p2.x, t.p2.y);
     double area_PBC = getArea(p_x, p_y, t.p2.x, t.p2.y, t.p3.x, t.p3.y);
     double area_PCA = getArea(p_x, p_y, t.p3.x, t.p3.y, t.p1.x, t.p1.y);
 
-    return fabs(area_ABC - (area_PAB + area_PBC + area_PCA)) < epsilon;
+    /*
+        Barycentric Coodinates Method:
+        
+        For any point P and triangle ABC,
+        P = alpha * A + beta * B + gamma * C
+
+        where alpha + beta + gamma = 1
+        If alpha, beta, gamma >= 0, then P is inside the triangle ABC, else outside. 
+
+        alpha = area_PBC / area_ABC ; Triangle opposite to vertex A
+        beta = area_PCA / area_ABC ; Triangle opposite to vertex B
+        gamma = area_PAB / area_ABC ;  Triangle opposite to vertex C
+
+        The z value of the point P can be calculated as:
+        p_z = alpha * a_z + beta * b_z + gamma * c_z
+    */
+
+
+    double alpha = area_PBC / area_ABC;
+    double beta = area_PCA / area_ABC;
+    double gamma = area_PAB / area_ABC;
+
+    if(alpha >= -epsilon && beta >= -epsilon && gamma >= -epsilon){
+        // Point is inside the triangle
+        // Assigning the value to the reference variable p_z
+        p_z = alpha * t.p1.z + beta * t.p2.z + gamma * t.p3.z;
+        return true;
+    }
+    else{
+        // Point is outside the triangle
+        return false;
+    }
 }
 
 void constructBuffers(){
@@ -486,14 +510,18 @@ void constructBuffers(){
             for(int col = start_x; col <= end_x; col++){
                 double p_x = left_x + col * dx;
                 double p_y = top_y - row * dy;
-                if(isPointInsideTriangle(p_x, p_y, t)){
-                    double z = (t.p1.z + t.p2.z + t.p3.z) / 3.0; // Average Z value for simplicity
-                    if(z < zBuffer[row][col] && z >= zFront){
-                        zBuffer[row][col] = z;
+                double p_z; 
+
+                if(get_zValue_if_point_inside_triangle(p_x, p_y, p_z, t)){
+                    // Point is inside the triangle
+                    if((zBuffer[row][col] - p_z) > epsilon && p_z >= zFront){
+                        zBuffer[row][col] = p_z;
                         frameBuffer[row][col] = t.color; // Set the color of the triangle
                     }
                 }
+                
             }
+
         }
     }
 }
