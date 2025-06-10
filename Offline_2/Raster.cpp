@@ -1,10 +1,19 @@
 #include<bits/stdc++.h>
+#include "bitmap_image.hpp"
 
 #define deg2rad M_PI/180.0
 
-#define epsilon 1e-4f
+#define epsilon 1e-7f
 
 using namespace std;
+
+random_device rd;
+mt19937 gen(rd());
+
+int getRandomInt(int min, int max) {
+    std::uniform_int_distribution<int> distribution(min, max);
+    return distribution(gen);
+}
 
 class Point{
     public:
@@ -58,15 +67,52 @@ class Point{
 // Vector and Point are represented in the same way
 typedef Point Vector;
 
+class Color{
+    public:
+    int r, g, b;
+    Color(int r, int g, int b){
+        this->r = r;
+        this->g = g;
+        this->b = b;
+    }
+    Color(){
+        // Default color is black
+        r = 0;
+        g = 0;
+        b = 0;
+    }
+};
+
+Color palette[] = {
+    Color(255, 0, 0),    // Red
+    Color(0, 255, 0),    // Green
+    Color(0, 0, 255),    // Blue
+    Color(255, 255, 0),  // Yellow
+    Color(255, 0, 255),  // Magenta
+    Color(255, 128, 0),  // Orange
+    Color(128, 0, 255),  // Violet
+    Color(255, 255, 255), // White
+    Color(0, 255, 255),  // Cyan
+    Color(255, 192, 203), // Pink
+    Color(153, 102, 51), // Brown
+    Color(102, 0, 153)   // Purple
+};
+
+int palette_size = sizeof(palette) / sizeof(palette[0]);
 class Triangle{
     public:
     Point p1, p2, p3;
+    Color color;
     Triangle(Point p1, Point p2, Point p3){
         this->p1 = p1;
         this->p2 = p2;
         this->p3 = p3;
+        int index = getRandomInt(0, palette_size - 1);
+        this->color = palette[index];
     }
 };
+
+vector<Triangle> triangles;
 
 class Matrix{
     public:
@@ -121,10 +167,16 @@ Matrix pointToMatrix(Point& p){
     return m;
 }
 
+// Global variables
 Point eye, look;
 Vector up;
 double fovY, aspectRatio, near, far;
-
+int screenWidth, screenHeight;
+double screenLeft, screenBottom;
+double zFront, zRear;
+double dx, dy, left_x, right_x, top_y, bottom_y;
+double **zBuffer;
+Color **frameBuffer;
 
 Matrix getIdentityMatrix(){
     Matrix identity(4,4);
@@ -349,9 +401,145 @@ void transformPoints(Matrix& transformMatrix, ifstream& input_file, ofstream& ou
     }
 }
 
+void config_setup(ifstream& config_file){
+    config_file >> screenWidth >> screenHeight
+                >> screenLeft
+                >> screenBottom
+                >> zFront
+                >> zRear;
 
-    
+    dx = -2*screenLeft / screenWidth;
+    dy = -2*screenBottom / screenHeight;
+    left_x = screenLeft + (dx/2);
+    right_x = -left_x;
+    top_y = -(screenBottom) - (dy/2);
+    bottom_y = -top_y;
 
+    cout<< "dx = " << dx << endl;
+    cout<< "dy = " << dy << endl;
+    cout<< "left_x = " << left_x << endl;
+    cout<< "right_x = " << right_x << endl;
+    cout<< "top_y = " << top_y << endl;
+    cout<< "bottom_y = " << bottom_y << endl;
+
+    zBuffer = new double*[screenHeight];
+    for(int i=0; i<screenHeight; i++){
+        zBuffer[i] = new double[screenWidth];
+        for(int j=0; j<screenWidth; j++){
+            zBuffer[i][j] = zRear;  
+        }
+    }
+
+    frameBuffer = new Color*[screenHeight];
+    for(int i=0; i<screenHeight; i++){
+        frameBuffer[i] = new Color[screenWidth];
+        for(int j=0; j<screenWidth; j++){
+            frameBuffer[i][j] = Color(); // Initialize with black color(default)
+        }
+    }
+}
+
+
+void readTriangles(ifstream& stage3_file){
+    triangles.clear();
+    while(true){
+        double x1, y1, z1, x2, y2, z2, x3, y3, z3;
+        stage3_file >> x1 >> y1 >> z1 >> x2 >> y2 >> z2 >> x3 >> y3 >> z3;
+        if(stage3_file.eof()){
+            break;
+        }
+        Point p1(x1,y1,z1);
+        Point p2(x2,y2,z2);
+        Point p3(x3,y3,z3);
+        triangles.push_back(Triangle(p1,p2,p3));
+    }
+    stage3_file.close();
+}
+
+double getArea(double x1, double y1, double x2, double y2, double x3, double y3){
+    return fabs((x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)) / 2.0);
+}
+
+bool isPointInsideTriangle(double p_x, double p_y, const Triangle& t){
+    double area_ABC = getArea(t.p1.x, t.p1.y, t.p2.x, t.p2.y, t.p3.x, t.p3.y);
+    double area_PAB = getArea(p_x, p_y, t.p1.x, t.p1.y, t.p2.x, t.p2.y);
+    double area_PBC = getArea(p_x, p_y, t.p2.x, t.p2.y, t.p3.x, t.p3.y);
+    double area_PCA = getArea(p_x, p_y, t.p3.x, t.p3.y, t.p1.x, t.p1.y);
+
+    return fabs(area_ABC - (area_PAB + area_PBC + area_PCA)) < epsilon;
+}
+
+void constructBuffers(){
+    for(const Triangle& t : triangles){
+        double min_x = min({t.p1.x, t.p2.x, t.p3.x});
+        double max_x = max({t.p1.x, t.p2.x, t.p3.x});
+        double min_y = min({t.p1.y, t.p2.y, t.p3.y});
+        double max_y = max({t.p1.y, t.p2.y, t.p3.y});
+
+        int start_x = max(0, (int)((min_x - left_x) / dx));
+        int end_x = min((screenWidth - 1), (int)round((max_x - left_x) / dx));
+
+        int start_y = max(0, (int)((top_y - max_y) / dy));
+        int end_y = min((screenHeight - 1), (int)round((top_y - min_y) / dy));
+
+        for(int row = start_y; row <= end_y; row++){
+            for(int col = start_x; col <= end_x; col++){
+                double p_x = left_x + col * dx;
+                double p_y = top_y - row * dy;
+                if(isPointInsideTriangle(p_x, p_y, t)){
+                    double z = (t.p1.z + t.p2.z + t.p3.z) / 3.0; // Average Z value for simplicity
+                    if(z < zBuffer[row][col] && z >= zFront){
+                        zBuffer[row][col] = z;
+                        frameBuffer[row][col] = t.color; // Set the color of the triangle
+                    }
+                }
+            }
+        }
+    }
+}
+
+void drawImage(const string& filepath){
+    bitmap_image image(screenWidth,screenHeight);
+    for(int row = 0; row < screenHeight; row++){
+        for(int col = 0; col < screenWidth; col++){
+            // col -> x coord; row -> y coord
+            Color c = frameBuffer[row][col];
+            image.set_pixel(col, row, c.r, c.g, c.b);
+        }
+    }
+    image.save_image(filepath);
+    cout << "Image saved to " << filepath << endl;
+
+    // Free memory
+    for(int i=0; i< screenHeight; i++){
+        delete[] frameBuffer[i];
+    }
+    delete[] frameBuffer;
+}
+
+void writeZBufferToFile(const string& filepath){
+    ofstream zBuffer_file(filepath);
+    if(!zBuffer_file.is_open()){
+        cerr << "Unable to open zBuffer file for writing" << endl;
+        return;
+    }
+    zBuffer_file << fixed << setprecision(6);
+    for(int row = 0; row < screenHeight; row++){
+        for(int col = 0; col < screenWidth; col++){
+            if(zBuffer[row][col] != zRear){
+                zBuffer_file << zBuffer[row][col] << "\t";
+            }
+        }
+        zBuffer_file << endl;
+    }
+    zBuffer_file.close();
+    cout << "Z-buffer written to " << filepath << endl;
+
+    for(int i=0; i<screenHeight; i++){
+        delete[] zBuffer[i];
+    }
+    delete[] zBuffer;
+}
 
 int main(int argc, char** argv){
     int choice;
@@ -371,6 +559,9 @@ int main(int argc, char** argv){
     string stage1_file_path = "./output/" + to_string(choice) + "/stage1.txt";
     string stage2_file_path = "./output/" + to_string(choice) + "/stage2.txt";
     string stage3_file_path = "./output/" + to_string(choice) + "/stage3.txt";
+
+    string zBuffer_file_path = "./output/" + to_string(choice) + "/zBuffer.txt";
+    string image_file_path = "./output/" + to_string(choice) + "/out.bmp";
 
     ifstream scene_file(scene_file_path);
     ofstream stage1_file_output(stage1_file_path);
@@ -425,6 +616,29 @@ int main(int argc, char** argv){
     stage2_file_input.close();
     stage3_file_output.close();
     cout << "Stage 3 completed. Output written to "<< stage3_file_path << endl;
+
+
+    // Stage 4
+
+    ifstream config_file(config_file_path);
+    if(!config_file.is_open()){
+        cerr << "Unable to open config file" << endl;
+        exit(1);
+    }
+    config_setup(config_file);
+    config_file.close();
+
+    ifstream stage3_file_input(stage3_file_path);
+    if(!stage3_file_input.is_open()){
+        cerr << "Unable to open stage 3 file" << endl;
+        exit(1);
+    }
+    readTriangles(stage3_file_input);
+
+    constructBuffers();
+    drawImage(image_file_path);
+    writeZBufferToFile(zBuffer_file_path);
+    cout << "Stage 4 completed." << endl;
 
     return 0;
 }
