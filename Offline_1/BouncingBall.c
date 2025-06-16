@@ -665,10 +665,10 @@ void updateBall() {
     double distance = sqrt(dx * dx + dz * dz);
 
     if (distance > 0.0001f) {
-        // Axis = (-Z, 0, X) to rotate perpendicular to velocity and Y-up
+        // Axis = (-Z, 0, -X) to rotate perpendicular to velocity and Y-up
         ball.rotationAxis.x = -ball.velocity.z;
         ball.rotationAxis.y = 0.0;
-        ball.rotationAxis.z = ball.velocity.x;
+        ball.rotationAxis.z = -ball.velocity.x;
 
         // Normalize axis
         ball.rotationAxis = normalize(ball.rotationAxis);
