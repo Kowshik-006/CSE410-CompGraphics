@@ -1,8 +1,40 @@
+#include<bits/stdc++.h>
 class Vector{
     public:
     double x,y,z;
     Vector() : x(0), y(0), z(0) {}
     Vector(double x, double y, double z) : x(x), y(y), z(z) {}
+    // this . other
+    double operator*(const Vector& other) const {
+        return (x * other.x) + (y * other.y) + (z * other.z);
+    }
+    // this x other
+    Vector operator^(const Vector& other) const {
+        return Vector(
+            (y * other.z) - (other.y * z),
+            (other.x * z) - (x * other.z),
+            (x * other.y) - (other.x * y)
+        );
+    }
+    // this * scalar
+    Vector operator*(double scalar) const {
+        return Vector(x * scalar, y * scalar, z * scalar);
+    }
+    // this + other
+    Vector operator+(const Vector& other) const {
+        return Vector(x + other.x, y + other.y, z + other.z);
+    }
+
+    Vector operator-(const Vector& other) const {
+        return Vector(x - other.x, y - other.y, z - other.z);
+    }
+    Vector normalize(){
+        double length = sqrt((x * x) + (y * y) + (z * z));
+        if(length == 0){
+            return *this;
+        }
+        return Vector(x/length, y/length, z/length);
+    }
 };
 class Color{
     public:
