@@ -73,3 +73,11 @@ class SpotLight : public Light {
     SpotLight(Vector position, Color color, Vector direction, double cutoff_angle) 
         : Light(position, color), light_direction(direction), cutoff_angle(cutoff_angle){}
 };
+
+class Floor : public Object {
+    Floor(double floor_width, double tile_width){
+        reference_point = Vector(-floor_width/2, -floor_width/2, 0);
+        length = tile_width;
+    }
+    void draw();
+};

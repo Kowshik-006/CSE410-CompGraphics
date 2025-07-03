@@ -18,6 +18,9 @@ void Sphere :: draw(){
 void Triangle :: draw(){
     // lalala
 }
+void Floor :: draw(){
+    // lalala
+}
 
 void load_data(){
     ifstream input_file(scene_file);
