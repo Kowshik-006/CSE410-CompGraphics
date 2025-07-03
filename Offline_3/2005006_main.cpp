@@ -1,28 +1,55 @@
 #include "2005006_classes.hpp"
-#include<GL/glut.h>
-#define deg2rad M_PI/180.0
 
 using namespace std;
 
-vector<Object> objects;
-vector<Light> lights;
+vector<Object*> objects;
+vector<Light*> lights;
 
 string scene_file = "scene.txt";
 int recursion_levels;
 int image_width;
 int image_height;
 
-double eye_x = 4, eye_y = 4, eye_z = 4;          // Camera position point coordinates
+double eye_x = 80, eye_y = 80, eye_z = 80;          // Camera position point coordinates
 double center_x = 0, center_y = 0, center_z = 0; // Look-at point coordinates
 double up_x = 0, up_y = 1, up_z = 0;             // Up vector coordinates
 
-enum rotation_type {yaw,pitch,roll};
-
 void Sphere :: draw(){
-    // lalala
+    int stacks = 32;
+    int slices = 32;
+    glPushMatrix();
+    glTranslated(reference_point.x,reference_point.y,reference_point.z);
+    for (int i = 0; i < stacks; i++) {
+        glBegin(GL_QUAD_STRIP);
+        glColor3d(color.r,color.g,color.b);
+        for (int j = 0; j <= slices; j++) {
+            double theta = 2.0 * M_PI * j / slices;  // Longitude
+            double phi = M_PI * i / stacks;          // Latitude
+            
+            double x = length * cos(theta) * sin(phi);
+            double y = length * sin(theta) * sin(phi);
+            double z = length * cos(phi);
+            
+            glVertex3d(x, y, z);
+            
+            double phi_next = (i + 1) * M_PI / stacks;
+            x = length * cos(theta) * sin(phi_next);
+            y = length * sin(theta) * sin(phi_next);
+            z = length * cos(phi_next);
+            
+            glVertex3f(x, y, z);
+        }
+        glEnd();
+    }
+    glPopMatrix();
 }
 void Triangle :: draw(){
-    // lalala
+    glBegin(GL_TRIANGLES);{
+        glColor3d(color.r,color.g,color.b);
+        glVertex3d(a.x,a.y,a.z);
+        glVertex3d(b.x,b.y,b.z);
+        glVertex3d(c.x,c.y,c.z);
+    }glEnd();
 }
 void Floor :: draw(){
     // lalala
@@ -92,6 +119,8 @@ void display(){
         up_x,up_y,up_z // Up vector
     );
 
+    objects[0]->draw();
+
     glutSwapBuffers();
 }
 
@@ -107,7 +136,7 @@ void reshape(int width, int height)
     glLoadIdentity();
 
     // 45-degree field of view, aspect ratio, near and far clipping planes
-    gluPerspective(60.0f, aspect, 0.1f, 100.0f);
+    gluPerspective(60.0, aspect, 0.1, 100.0);
 }
 
 void AlphaNumericKeyListener(unsigned char key, int x, int y){
@@ -202,7 +231,7 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
 }
 
 void SpecialKeyListener(int key, int x, int y){
-    double shift_value = 0.1;
+    double shift_value = 0.5;
 
     switch(key){
         case GLUT_KEY_UP:{
@@ -322,7 +351,7 @@ void load_data(){
         Color color;
         CoEfficients coeff;
         int shine;
-        Object obj;
+        Object *obj;
 
         if(object_type == "sphere"){
             Vector center;
@@ -331,14 +360,14 @@ void load_data(){
             input_file >> center.x >> center.y >> center.z
                        >> radius;
                        
-            obj = Sphere(center, radius);
+            obj = new Sphere(center, radius);
         }
         else if(object_type == "triangle"){
             Vector a, b, c;
             input_file >> a.x >> a.y >> a.z
                        >> b.x >> b.y >> b.z
                        >> c.x >> c.y >> c.z;
-            obj = Triangle(a,b,c);
+            obj = new Triangle(a,b,c);
         }
 
         else if(object_type == "general"){
@@ -346,7 +375,8 @@ void load_data(){
             Vector ref_point;
             double height, width, length;
             input_file >> A >> B >> C >> D >> E >> F >> G >> H >> I >> J
-                       >> ref_point.x >> ref_point.y >> ref_point.z >> height >> width >> length; 
+                       >> ref_point.x >> ref_point.y >> ref_point.z >> length >> width >> height; 
+            obj = new Object(ref_point, height, width, length);
         }
         else{
             cerr << "Invalid  object type : " << object_type << endl;
@@ -357,9 +387,9 @@ void load_data(){
                    >> coeff.ambient >> coeff.diffuse >> coeff.specular >> coeff.reflection
                    >> shine;
         
-        obj.setColor(color);
-        obj.setCoefficients(coeff);
-        obj.setShine(shine);
+        obj->setColor(color);
+        obj->setCoefficients(coeff);
+        obj->setShine(shine);
 
         objects.push_back(obj);
     }
@@ -372,7 +402,7 @@ void load_data(){
         input_file >> position.x >> position.y >> position.z
                    >> color.r >> color.g >> color.b;
         
-        lights.push_back(PointLight(position, color));
+        lights.push_back(new PointLight(position, color));
     }
 
     input_file >> num_spot_lights;
@@ -387,7 +417,7 @@ void load_data(){
                    >> direction.x >> direction.y >> direction.z
                    >> cutoff_angle;
                    
-        lights.push_back(SpotLight(position, color, direction, cutoff_angle));
+        lights.push_back(new SpotLight(position, color, direction, cutoff_angle));
     }
 
     input_file.close();

@@ -1,4 +1,8 @@
 #include<bits/stdc++.h>
+#include<GL/glut.h>
+#define deg2rad M_PI/180.0
+
+enum rotation_type {yaw,pitch,roll};
 class Vector{
     public:
     double x,y,z;
@@ -57,6 +61,8 @@ class Object{
     CoEfficients coefficients;
     int shine;
     Object(){}
+    Object(Vector ref_point, double height, double width, double length) : 
+        reference_point(ref_point), height(height), width(width), length(length){}
     virtual void draw() {}   
     void setColor(Color color) {
         this->color = color;
@@ -76,14 +82,14 @@ class Sphere : public Object {
         reference_point = center;
         length = radius;
     }
-    void draw();
+    void draw() override;
 };
 
 class Triangle : public Object {
     public:
     Vector a, b, c;
     Triangle(Vector a, Vector b, Vector c) : a(a), b(b), c(c) {}
-    void draw();
+    void draw() override;
 };
 
 class Light{
