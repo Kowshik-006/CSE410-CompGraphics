@@ -30,6 +30,7 @@ double up_x = 0, up_y = 0, up_z = 1;             // Up vector coordinates
 bool use_texture = false;
 unsigned char* texture_data = nullptr;
 int texture_width = 0, texture_height = 0, texture_channels = 0;
+GLuint texture_id = 0;
 
 
 void load_texture(const char* filename){
@@ -41,6 +42,29 @@ void load_texture(const char* filename){
         cerr << "Error loading texture: " << filename << endl;
         return;
     }
+}
+
+void create_opengl_texture(){
+    if(texture_data == nullptr){
+        return;
+    }
+    
+    if(texture_id != 0){
+        glDeleteTextures(1, &texture_id);
+    }
+    
+    glGenTextures(1, &texture_id);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    GLenum format = (texture_channels == 3) ? GL_RGB : GL_RGBA;
+    glTexImage2D(GL_TEXTURE_2D, 0, format, texture_width, texture_height, 0, format, GL_UNSIGNED_BYTE, texture_data);
+    
+    glBindTexture(GL_TEXTURE_2D, 0); // Unbind texture
 }
 
 
@@ -264,28 +288,65 @@ double Triangle :: intersect(const Ray& ray, Color& color, int level){
 void Floor :: draw(){
     int horizontal_tiles = (-2)*reference_point.x / length;
     int vertical_tiles = (-2)*reference_point.y / length;
-    bool black_tile = true;
-    for(int i = 0; i < vertical_tiles; i++){
-        for(int j = 0; j < horizontal_tiles; j++){
-            double bottom_left_x = reference_point.x + j * length;
-            double bottom_left_y = reference_point.y + i * length;
-            glBegin(GL_QUADS);{
-                if(black_tile){
-                    glColor3d(0.0, 0.0, 0.0);
-                }
-                else{
-                    glColor3d(1.0, 1.0, 1.0);
-                }
-                black_tile = !black_tile;
-                // xy plane
-                glVertex3d(bottom_left_x, bottom_left_y, reference_point.z);
-                glVertex3d(bottom_left_x + length, bottom_left_y, reference_point.z);
-                glVertex3d(bottom_left_x + length, bottom_left_y + length, reference_point.z);
-                glVertex3d(bottom_left_x, bottom_left_y + length, reference_point.z);
-            }glEnd();
+    
+    if(use_texture && texture_id != 0){
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texture_id);
+        glColor3d(1.0, 1.0, 1.0); // Set color to white for proper texture display
+        
+        for(int i = 0; i < vertical_tiles; i++){
+            for(int j = 0; j < horizontal_tiles; j++){
+                double bottom_left_x = reference_point.x + j * length;
+                double bottom_left_y = reference_point.y + i * length;
+                
+                glBegin(GL_QUADS);{
+                    // Bottom-left
+                    glTexCoord2d(0.0, 0.0);
+                    glVertex3d(bottom_left_x, bottom_left_y, reference_point.z);
+                    
+                    // Bottom-right  
+                    glTexCoord2d(1.0, 0.0);
+                    glVertex3d(bottom_left_x + length, bottom_left_y, reference_point.z);
+                    
+                    // Top-right
+                    glTexCoord2d(1.0, 1.0);
+                    glVertex3d(bottom_left_x + length, bottom_left_y + length, reference_point.z);
+                    
+                    // Top-left
+                    glTexCoord2d(0.0, 1.0);
+                    glVertex3d(bottom_left_x, bottom_left_y + length, reference_point.z);
+                }glEnd();
+            }
         }
-        if(horizontal_tiles % 2 == 0){
-            black_tile = !black_tile; 
+        
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDisable(GL_TEXTURE_2D);
+    }
+    else{
+        // Draw checkerboard pattern
+        bool black_tile = true;
+        for(int i = 0; i < vertical_tiles; i++){
+            for(int j = 0; j < horizontal_tiles; j++){
+                double bottom_left_x = reference_point.x + j * length;
+                double bottom_left_y = reference_point.y + i * length;
+                glBegin(GL_QUADS);{
+                    if(black_tile){
+                        glColor3d(0.0, 0.0, 0.0);
+                    }
+                    else{
+                        glColor3d(1.0, 1.0, 1.0);
+                    }
+                    black_tile = !black_tile;
+                    // xy plane
+                    glVertex3d(bottom_left_x, bottom_left_y, reference_point.z);
+                    glVertex3d(bottom_left_x + length, bottom_left_y, reference_point.z);
+                    glVertex3d(bottom_left_x + length, bottom_left_y + length, reference_point.z);
+                    glVertex3d(bottom_left_x, bottom_left_y + length, reference_point.z);
+                }glEnd();
+            }
+            if(horizontal_tiles % 2 == 0){
+                black_tile = !black_tile; 
+            }
         }
     }
 }
@@ -605,6 +666,7 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             if(!use_texture){
                 load_texture("texture_1.bmp");
                 if(texture_data){
+                    create_opengl_texture();
                     use_texture = !use_texture;
                     cout << "Texture 1 loaded" << endl;
                 }
@@ -622,6 +684,7 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             if(!use_texture){
                 load_texture("texture_2.bmp");
                 if(texture_data){
+                    create_opengl_texture();
                     use_texture = !use_texture;
                     cout << "Texture 2 loaded" << endl;
                 }
@@ -645,6 +708,7 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
                 delete light; // Free memory
             }
             if (texture_data) stbi_image_free(texture_data);
+            if (texture_id != 0) glDeleteTextures(1, &texture_id);
             exit(0);
             break;
         }
