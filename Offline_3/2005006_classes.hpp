@@ -1,5 +1,6 @@
 #include<bits/stdc++.h>
 #include<GL/glut.h>
+#include"bitmap_image.hpp"
 #define deg2rad M_PI/180.0
 
 enum rotation_type {yaw,pitch,roll};
@@ -40,6 +41,21 @@ class Vector{
         return Vector(x/length, y/length, z/length);
     }
 };
+
+class Matrix{
+    public:
+    double m[3][3];
+    Matrix(Vector column1, Vector column2, Vector column3){
+        m[0][0] = column1.x; m[0][1] = column2.x; m[0][2] = column3.x;
+        m[1][0] = column1.y; m[1][1] = column2.y; m[1][2] = column3.y;
+        m[2][0] = column1.z; m[2][1] = column2.z; m[2][2] = column3.z;
+    }
+    double determinant() const {
+        return  m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2]) 
+               -m[0][1] * (m[1][0] * m[2][2] - m[2][0] * m[1][2]) 
+               +m[0][2] * (m[1][0] * m[2][1] - m[2][0] * m[1][1]);
+    }
+};
 class Color{
     public:
     double r, g, b;
@@ -53,7 +69,18 @@ class CoEfficients{
     CoEfficients(double ambient, double diffuse, double specular, double reflection) 
         : ambient(ambient), diffuse(diffuse), specular(specular), reflection(reflection) {}
 };
+
+class Ray{
+    public: 
+    Vector start;
+    Vector direction;
+    Ray(Vector start, Vector direction) : start(start), direction(direction.normalize()){}
+};
+
 class Object{
+    private:
+    double A, B, C, D, E, F, G, H, I, J; // General object coefficients
+    bool valid(const Ray& ray, double t);
     public:
     Vector reference_point;
     double height, width, length;
@@ -61,8 +88,8 @@ class Object{
     CoEfficients coefficients;
     int shine;
     Object(){}
-    Object(Vector ref_point, double height, double width, double length) : 
-        reference_point(ref_point), height(height), width(width), length(length){}
+    Object(Vector ref_point, double length, double width, double height) : 
+        reference_point(ref_point), length(length), width(width), height(height){}
     virtual void draw() {}   
     void setColor(Color color) {
         this->color = color;
@@ -73,6 +100,13 @@ class Object{
     void setCoefficients(CoEfficients coefficients) {
         this->coefficients = coefficients;
     }
+    void setGeneralCoefficients(double A, double B, double C, double D, 
+                            double E, double F, double G, double H, double I, double J){
+        this->A = A; this->B = B; this->C = C; this->D = D;
+        this->E = E; this->F = F; this->G = G; this->H = H;
+        this->I = I; this->J = J;
+    }
+    virtual double intersect(const Ray& ray, const Color& color, int level);
 };
 
 
@@ -83,6 +117,7 @@ class Sphere : public Object {
         length = radius;
     }
     void draw() override;
+    double intersect(const Ray& ray, const Color& color, int level) override;
 };
 
 class Triangle : public Object {
@@ -90,6 +125,7 @@ class Triangle : public Object {
     Vector a, b, c;
     Triangle(Vector a, Vector b, Vector c) : a(a), b(b), c(c) {}
     void draw() override;
+    double intersect(const Ray& ray, const Color& color, int level) override;
 };
 
 class Light{
@@ -113,9 +149,14 @@ class SpotLight : public Light {
 };
 
 class Floor : public Object {
+    public:
     Floor(double floor_width, double tile_width){
         reference_point = Vector(-floor_width/2, -floor_width/2, 0);
         length = tile_width;
     }
-    void draw();
+    void draw() override;
+    double intersect(const Ray& ray, const Color& color, int level) override;
+    void setColor(Vector p);
 };
+
+
