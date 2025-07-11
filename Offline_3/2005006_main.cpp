@@ -43,45 +43,6 @@ void load_texture(const char* filename){
     }
 }
 
-Color sample_texture(double u, double v) {
-    if (!texture_data || texture_width <= 0 || texture_height <= 0) {
-        return Color(0.5, 0.5, 0.5); // Gray fallback
-    }
-
-    // Clamp u and v to [0,1]
-    u = max(0.0, min(1.0, u));
-    v = max(0.0, min(1.0, v));
-
-    // Normalized -> pixel coords
-    int pixel_x = (int)(u * (texture_width - 1));
-    int pixel_y = (int)((1.0 - v) * (texture_height - 1)); // Flip Y
-
-    // Safety clamp
-    pixel_x = max(0, min(texture_width - 1, pixel_x));
-    pixel_y = max(0, min(texture_height - 1, pixel_y));
-
-    // Compute array index
-    int index = (pixel_y * texture_width + pixel_x) * texture_channels;
-    int max_index = texture_width * texture_height * texture_channels;
-    if (index < 0 || index + 2 >= max_index) {
-        return Color(1.0, 0.0, 1.0); // Magenta = error
-    }
-
-    Color color;
-    color.r = texture_data[index] / 255.0;
-    if (texture_channels > 2) {
-        color.g = texture_data[index + 1] / 255.0;
-    } else {
-        color.g = color.r; // Grayscale
-    }
-    if (texture_channels > 3) {
-        color.b = texture_data[index + 2] / 255.0;
-    } else {
-        color.b = color.r; // Grayscale
-    }
-    return color;
-}
-
 
 bool Object :: valid(const Ray& ray,double t){
     if(t < 0){
@@ -116,21 +77,9 @@ bool hasIntersection(const Ray& ray, const double distance){
     return false;
 }
 
-void postProcessing(const Ray& ray, Color& color, int level, double t, Object *obj){
+void postProcessing(const Ray& ray, Color& color, Color& base_color, int level, double t, Object *obj){
     Vector p = ray.start + ray.direction * t;
     Vector normal = obj->getNormal(p);
-
-    // For the floor, always sample the texture color at this point
-    Color base_color = obj->color;
-    Floor* floor_ptr = dynamic_cast<Floor*>(obj);
-    if (floor_ptr && use_texture) {
-        double tile_size = floor_ptr->length;
-        double u = fmod(p.x - floor_ptr->reference_point.x, tile_size) / tile_size;
-        double v = fmod(p.y - floor_ptr->reference_point.y, tile_size) / tile_size;
-        if (u < 0) u += 1.0;
-        if (v < 0) v += 1.0;
-        base_color = sample_texture(u, v);
-    }
 
     color = base_color * obj->coefficients.ambient;
     Vector ray_start = p + normal * epsilon; // Move a bit away from the surface to avoid self-intersection
@@ -175,11 +124,15 @@ void postProcessing(const Ray& ray, Color& color, int level, double t, Object *o
                 reflected_color = temp_reflected_color;
             }
         }
-        color = color + reflected_color * obj->coefficients.reflection;
+        if(t_min < INFINITY){
+            color = color + reflected_color * obj->coefficients.reflection;
+        }
     }
+    color.r = min(1.0, color.r);
+    color.g = min(1.0, color.g);
+    color.b = min(1.0, color.b);
 }
 double Object :: intersect(const Ray& ray, Color& color, int level){
-    // cout<< "In object intersect : Recursion Level: " << level << endl;
     Vector R_o = ray.start;
     Vector R_d = ray.direction;
 
@@ -205,7 +158,7 @@ double Object :: intersect(const Ray& ray, Color& color, int level){
     double t = valid(ray, t1) ? (valid(ray, t2) ? min(t1, t2) : t1 ) : (valid(ray, t2) ? t2 : -1);
 
     if(level != 0 && t >= 0){
-        postProcessing(ray, color, level, t, this);
+        postProcessing(ray, color, this->color, level, t, this);
     }
     return t;
 }
@@ -270,7 +223,7 @@ double Sphere :: intersect(const Ray& ray, Color& color, int level){
     double t = t1 < 0 ? (t2 < 0 ? -1 : t2) : (t2 < 0 ? t1 : min(t1, t2));
 
     if(level != 0 && t >= 0){
-        postProcessing(ray, color, level, t, this);
+        postProcessing(ray, color, this->color, level, t, this);
     }
     return t;
 
@@ -304,7 +257,7 @@ double Triangle :: intersect(const Ray& ray, Color& color, int level){
     t = (beta >= 0 && gamma >= 0 && (beta + gamma) <= 1 && t >= 0) ? t : -1;
 
     if(level != 0 && t >= 0){
-        postProcessing(ray, color, level, t, this);
+        postProcessing(ray, color, this->color, level, t, this);
     }
     return t;
 }
@@ -337,15 +290,32 @@ void Floor :: draw(){
     }
 }
 
-void Floor :: setColor(Vector p){
+Color Floor :: getColor(Vector p){
     int row = (p.y - reference_point.y) / length;
     int col = (p.x - reference_point.x) / length;
-    if((row + col) % 2 == 0){
-        color = Color(0, 0, 0); // Black tile
+
+    bool black_tile = (row + col) % 2 == 0;
+    
+    Color base_color;
+    if(use_texture){
+        double u = fmod(p.x - reference_point.x, length) / length;
+        double v = fmod(p.y - reference_point.y, length) / length;
+        if(u < 0) u += 1.0;
+        if(v < 0) v += 1.0;
+        
+        int x = (int)(u * (texture_width - 1));
+        int y = (int)((1-v) * (texture_height - 1));
+
+        int idx = (y * texture_width + x) * texture_channels;
+        double r = texture_data[idx] / 255.0;
+        double g = texture_data[idx + 1] / 255.0;
+        double b = texture_data[idx + 2] / 255.0;
+        base_color = Color(r, g, b);
     }
     else{
-        color = Color(1, 1, 1); // White tile
+        base_color = black_tile ? Color(0, 0, 0) : Color(1, 1, 1);
     }
+    return base_color;
 }
 
 Vector Floor :: getNormal(const Vector& p){
@@ -357,21 +327,26 @@ double Floor :: intersect(const Ray& ray, Color& color, int level){
     Vector normal = Vector(0, 0, 1); 
     double numerator = normal * (reference_point - ray.start);
     double denominator = normal * ray.direction;
-    if(denominator == 0){
+    if(fabs(denominator) < epsilon){
         return -1; // Ray is parallel to the floor
     }
     double t = numerator / denominator;
-    if(t < 0){
+    if(t < epsilon){
         return -1; // Intersection is behind the ray start  
     }
     Vector p = ray.start + ray.direction * t;
-    if(!use_texture){
-        this->setColor(p);
-    }
+
+    double floor_width = -2 * reference_point.x;
+    if (p.x < reference_point.x || p.x > reference_point.x + floor_width ||
+        p.y < reference_point.y || p.y > reference_point.y + floor_width)
+        return -1;
+
+    if(level == 0){
+        return t;
+    }    
     
-    if(level != 0){
-        postProcessing(ray, color, level, t, this);
-    }
+    Color base_color = this->getColor(p);
+    postProcessing(ray, color, base_color, level, t, this);
     
     return t; 
 }
@@ -908,7 +883,6 @@ void init_openGL(int* argc, char** argv){
 
 int main(int argc, char** argv){
     load_data();
-    load_texture("texture_2.jpg");
     init_openGL(&argc,argv);
     return 0;
 }

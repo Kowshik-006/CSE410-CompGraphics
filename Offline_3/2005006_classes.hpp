@@ -1,6 +1,5 @@
 #include<bits/stdc++.h>
 
-
 enum rotation_type {yaw,pitch,roll};
 class Vector{
     public:
@@ -171,7 +170,7 @@ class Floor : public Object {
     }
     void draw() override;
     double intersect(const Ray& ray, Color& color, int level) override;
-    void setColor(Vector p);
+    Color getColor(Vector p);
     Vector getNormal(const Vector& p) override;
 };
 
