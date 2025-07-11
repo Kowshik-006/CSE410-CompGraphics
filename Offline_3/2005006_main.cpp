@@ -1,4 +1,10 @@
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 #include "2005006_classes.hpp"
+#include"bitmap_image.hpp"
+#include <GL/glut.h>
+#define deg2rad M_PI/180.0
+#define epsilon 1e-6
 
 using namespace std;
 
@@ -21,6 +27,62 @@ double eye_x = 90, eye_y = -125, eye_z = 90;        // Camera position point coo
 double center_x = 45, center_y = -25, center_z = 45; // Look-at point coordinates
 double up_x = 0, up_y = 0, up_z = 1;             // Up vector coordinates
 
+bool use_texture = false;
+unsigned char* texture_data = nullptr;
+int texture_width = 0, texture_height = 0, texture_channels = 0;
+
+
+void load_texture(const char* filename){
+    if(texture_data != nullptr){
+        stbi_image_free(texture_data);
+    }
+    texture_data = stbi_load(filename, &texture_width, &texture_height, &texture_channels, 0);
+    if(!texture_data){
+        cerr << "Error loading texture: " << filename << endl;
+        return;
+    }
+}
+
+Color sample_texture(double u, double v) {
+    if (!texture_data || texture_width <= 0 || texture_height <= 0) {
+        return Color(0.5, 0.5, 0.5); // Gray fallback
+    }
+
+    // Clamp u and v to [0,1]
+    u = max(0.0, min(1.0, u));
+    v = max(0.0, min(1.0, v));
+
+    // Normalized -> pixel coords
+    int pixel_x = (int)(u * (texture_width - 1));
+    int pixel_y = (int)((1.0 - v) * (texture_height - 1)); // Flip Y
+
+    // Safety clamp
+    pixel_x = max(0, min(texture_width - 1, pixel_x));
+    pixel_y = max(0, min(texture_height - 1, pixel_y));
+
+    // Compute array index
+    int index = (pixel_y * texture_width + pixel_x) * texture_channels;
+    int max_index = texture_width * texture_height * texture_channels;
+    if (index < 0 || index + 2 >= max_index) {
+        return Color(1.0, 0.0, 1.0); // Magenta = error
+    }
+
+    Color color;
+    color.r = texture_data[index] / 255.0;
+    if (texture_channels > 2) {
+        color.g = texture_data[index + 1] / 255.0;
+    } else {
+        color.g = color.r; // Grayscale
+    }
+    if (texture_channels > 3) {
+        color.b = texture_data[index + 2] / 255.0;
+    } else {
+        color.b = color.r; // Grayscale
+    }
+    return color;
+}
+
+
 bool Object :: valid(const Ray& ray,double t){
     if(t < 0){
         return false;
@@ -30,7 +92,94 @@ bool Object :: valid(const Ray& ray,double t){
             ((reference_point.y <= p.y && p.y <= reference_point.y + width) || width == 0) &&
             ((reference_point.z <= p.z && p.z <= reference_point.z + height) || height == 0));
 }
-double Object :: intersect(const Ray& ray, const Color& color, int level){
+
+Vector Object :: getNormal(const Vector& p){
+    double x = p.x;
+    double y = p.y;
+    double z = p.z;
+
+    double grad_x = 2 * A * x + D * y + F * z + G;
+    double grad_y = 2 * B * y + D * x + E * z + H;
+    double grad_z = 2 * C * z + E * y + F * x + I;
+
+    return Vector(grad_x, grad_y, grad_z).normalize();
+}
+
+bool hasIntersection(const Ray& ray, const double distance){
+    Color color;
+    for(Object* obj : objects){
+        double t = obj->intersect(ray, color, 0);
+        if(t >= 0 && t <= distance){
+            return true; 
+        }
+    }
+    return false;
+}
+
+void postProcessing(const Ray& ray, Color& color, int level, double t, Object *obj){
+    Vector p = ray.start + ray.direction * t;
+    Vector normal = obj->getNormal(p);
+
+    // For the floor, always sample the texture color at this point
+    Color base_color = obj->color;
+    Floor* floor_ptr = dynamic_cast<Floor*>(obj);
+    if (floor_ptr && use_texture) {
+        double tile_size = floor_ptr->length;
+        double u = fmod(p.x - floor_ptr->reference_point.x, tile_size) / tile_size;
+        double v = fmod(p.y - floor_ptr->reference_point.y, tile_size) / tile_size;
+        if (u < 0) u += 1.0;
+        if (v < 0) v += 1.0;
+        base_color = sample_texture(u, v);
+    }
+
+    color = base_color * obj->coefficients.ambient;
+    Vector ray_start = p + normal * epsilon; // Move a bit away from the surface to avoid self-intersection
+    
+    for(Light* light : lights){
+        Vector ray_l_direction = light->light_position - p; // Direction from point p to the light source
+        double distance = ray_l_direction.length();
+
+        Ray ray_l = Ray(ray_start, ray_l_direction);
+        SpotLight* spot_light = dynamic_cast<SpotLight*>(light);
+        if(spot_light != nullptr){
+            double cos_alpha = spot_light->light_direction * (ray_l.direction * (-1));
+            if(cos_alpha <= cos(spot_light->cutoff_angle * deg2rad)){
+                // Light is outside the cutoff angle
+                continue;
+            }
+        }
+        if(hasIntersection(ray_l, distance)){
+            // Object is in Shadow
+            continue;
+        }
+        double lambert_value = max(0.0, normal * ray_l.direction);
+        Vector ray_r_direction = (normal * (2*(normal * ray_l.direction)) - ray_l.direction).normalize(); 
+        double phong_value = max(0.0, ray_r_direction * (ray.direction * (-1)));
+        color = color + ((light->color * base_color) 
+        * (obj->coefficients.diffuse * lambert_value + 
+            obj->coefficients.specular * pow(phong_value, obj->shine)));     
+    }
+    // Recursive reflection
+    if (level > 1 && obj->coefficients.reflection > 0) {
+        Vector reflection_dir = ray.direction - normal * 2 * (ray.direction * normal);
+        reflection_dir = reflection_dir.normalize();
+        Vector reflection_start = p + reflection_dir * epsilon;
+        Ray reflection_ray(reflection_start, reflection_dir);
+        Color reflected_color(0, 0, 0);
+        double t_min = INFINITY;
+        for (Object* obj2 : objects) {
+            Color temp_reflected_color(0, 0, 0);
+            double t = obj2->intersect(reflection_ray, temp_reflected_color, level - 1);
+            if (t >= 0 && t < t_min) {
+                t_min = t;
+                reflected_color = temp_reflected_color;
+            }
+        }
+        color = color + reflected_color * obj->coefficients.reflection;
+    }
+}
+double Object :: intersect(const Ray& ray, Color& color, int level){
+    // cout<< "In object intersect : Recursion Level: " << level << endl;
     Vector R_o = ray.start;
     Vector R_d = ray.direction;
 
@@ -53,7 +202,12 @@ double Object :: intersect(const Ray& ray, const Color& color, int level){
     double t1 = (-b - sqrt(discriminant)) / (2 * a);
     double t2 = (-b + sqrt(discriminant)) / (2 * a);
     
-    return valid(ray, t1) ? (valid(ray, t2) ? min(t1, t2) : t1 ) : (valid(ray, t2) ? t2 : -1);
+    double t = valid(ray, t1) ? (valid(ray, t2) ? min(t1, t2) : t1 ) : (valid(ray, t2) ? t2 : -1);
+
+    if(level != 0 && t >= 0){
+        postProcessing(ray, color, level, t, this);
+    }
+    return t;
 }
 
 void Sphere :: draw(){
@@ -86,7 +240,11 @@ void Sphere :: draw(){
     glPopMatrix();
 }
 
-double Sphere :: intersect(const Ray& ray, const Color& color, int level){
+Vector Sphere :: getNormal(const Vector& p){
+    // Normal at point p on the sphere surface
+    return (p - reference_point).normalize();
+}
+double Sphere :: intersect(const Ray& ray, Color& color, int level){
     // reference_point = center of the sphere
     // length = radius of the sphere
     /*
@@ -109,17 +267,13 @@ double Sphere :: intersect(const Ray& ray, const Color& color, int level){
     double t1 = (-b - sqrt(discriminant)) / (2.0 * a);
     double t2 = (-b + sqrt(discriminant)) / (2.0 * a);
     
-    if(t1 < 0 && t2 < 0){
-        return -1; 
+    double t = t1 < 0 ? (t2 < 0 ? -1 : t2) : (t2 < 0 ? t1 : min(t1, t2));
+
+    if(level != 0 && t >= 0){
+        postProcessing(ray, color, level, t, this);
     }
-    if(t1 < 0){
-        return t2; 
-    }
-    if(t2 < 0){
-        return t1; 
-    }
-    
-    return min(t1, t2); 
+    return t;
+
 }
 void Triangle :: draw(){
     glBegin(GL_TRIANGLES);{
@@ -130,7 +284,14 @@ void Triangle :: draw(){
     }glEnd();
 }
 
-double Triangle :: intersect(const Ray& ray, const Color& color, int level){
+Vector Triangle :: getNormal(const Vector& p){
+    // Normal of the triangle is the cross product of two edges
+    Vector edge1 = b - a;
+    Vector edge2 = c - a;
+    return (edge1 ^ edge2).normalize();
+}
+
+double Triangle :: intersect(const Ray& ray, Color& color, int level){
     Matrix A = Matrix(ray.direction*(-1), b-a, c-a);
     Matrix t_m = Matrix(ray.start-a, b-a, c-a);
     Matrix beta_m = Matrix(ray.direction*(-1), ray.start-a, c-a);
@@ -140,22 +301,21 @@ double Triangle :: intersect(const Ray& ray, const Color& color, int level){
     double beta = beta_m.determinant() / A.determinant();
     double gamma = gamma_m.determinant() / A.determinant();
 
-    if( beta >= 0 && gamma >= 0 && (beta + gamma) <= 1){
-        return t;
+    t = (beta >= 0 && gamma >= 0 && (beta + gamma) <= 1 && t >= 0) ? t : -1;
+
+    if(level != 0 && t >= 0){
+        postProcessing(ray, color, level, t, this);
     }
-    return -1; // No intersection
+    return t;
 }
 void Floor :: draw(){
-    // cout<< "Drawing Floor" << endl;
     int horizontal_tiles = (-2)*reference_point.x / length;
     int vertical_tiles = (-2)*reference_point.y / length;
-    // cout << "Horizontal Tiles: " << horizontal_tiles << ", Vertical Tiles: " << vertical_tiles << endl;
     bool black_tile = true;
     for(int i = 0; i < vertical_tiles; i++){
         for(int j = 0; j < horizontal_tiles; j++){
             double bottom_left_x = reference_point.x + j * length;
             double bottom_left_y = reference_point.y + i * length;
-            // double bottom_left_z = reference_point.y + i * length;
             glBegin(GL_QUADS);{
                 if(black_tile){
                     glColor3d(0.0, 0.0, 0.0);
@@ -169,19 +329,12 @@ void Floor :: draw(){
                 glVertex3d(bottom_left_x + length, bottom_left_y, reference_point.z);
                 glVertex3d(bottom_left_x + length, bottom_left_y + length, reference_point.z);
                 glVertex3d(bottom_left_x, bottom_left_y + length, reference_point.z);
-                
-                // xz plane
-                // glVertex3d(bottom_left_x, reference_point.y, bottom_left_z);
-                // glVertex3d(bottom_left_x + length, reference_point.y, bottom_left_z );
-                // glVertex3d(bottom_left_x + length, reference_point.y, bottom_left_z + length);
-                // glVertex3d(bottom_left_x, reference_point.y, bottom_left_z + length);
             }glEnd();
         }
         if(horizontal_tiles % 2 == 0){
             black_tile = !black_tile; 
         }
     }
-
 }
 
 void Floor :: setColor(Vector p){
@@ -195,7 +348,12 @@ void Floor :: setColor(Vector p){
     }
 }
 
-double Floor :: intersect(const Ray& ray, const Color& color, int level){
+Vector Floor :: getNormal(const Vector& p){
+    // Normal of the floor is always (0, 0, 1)
+    return Vector(0, 0, 1);
+}
+
+double Floor :: intersect(const Ray& ray, Color& color, int level){
     Vector normal = Vector(0, 0, 1); 
     double numerator = normal * (reference_point - ray.start);
     double denominator = normal * ray.direction;
@@ -206,7 +364,15 @@ double Floor :: intersect(const Ray& ray, const Color& color, int level){
     if(t < 0){
         return -1; // Intersection is behind the ray start  
     }
-    this->setColor(ray.start + ray.direction * t);
+    Vector p = ray.start + ray.direction * t;
+    if(!use_texture){
+        this->setColor(p);
+    }
+    
+    if(level != 0){
+        postProcessing(ray, color, level, t, this);
+    }
+    
     return t; 
 }
 
@@ -350,21 +516,14 @@ void capture(){
             // maximum double number
             double t_min = INFINITY;
             Object* o_min = nullptr; 
-            for (int i = 0; i < objects.size(); i++) {
-                Object* obj = objects[i];
-                t = obj->intersect(ray, color, 0);
+            for (Object* obj : objects) {
+                Color temp_color = Color(0, 0, 0);
+                t = obj->intersect(ray, temp_color, recursion_levels);
                 if (t < t_min && t >= 0){
-                    // cout<< "Found object " << i << endl;
-                    // cout<<"Color: (" << obj->color.r << ", " << obj->color.g << ", " << obj->color.b << ")\n";
                     t_min = t;
                     o_min = obj;
+                    color = temp_color;
                 }
-            }
-            if(o_min != nullptr){
-                // cout<<"Found object\n";
-                // cout<<"Color: (" << o_min->color.r << ", " << o_min->color.g << ", " << o_min->color.b << ")\n";
-                color = o_min->color;
-                // cout<<"Color: "<< getColor(color) << endl;
             }
             image.set_pixel(i, j, color.r*255, color.g*255, color.b*255);
         }
@@ -379,6 +538,7 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
     double shift_angle = 1.0;
     switch(key){
         case '0':{
+            cout << "Capturing scene...\n";
             capture();
             cout<<"Captured scene\n";
             break;
@@ -466,6 +626,41 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             getPosition();
             break;
         }
+        case 'a':{
+            if(!use_texture){
+                load_texture("texture_1.bmp");
+                if(texture_data){
+                    use_texture = !use_texture;
+                    cout << "Texture 1 loaded" << endl;
+                }
+                else{
+                    cout << "Failed to load texture 1\n";
+                }
+            }
+            else{
+                use_texture = !use_texture;
+                cout << "Texture Off" << endl;
+            }
+            break;
+        }
+        case 's':{
+            if(!use_texture){
+                load_texture("texture_2.bmp");
+                if(texture_data){
+                    use_texture = !use_texture;
+                    cout << "Texture 2 loaded" << endl;
+                }
+                else{
+                    cout << "Failed to load texture 2\n";
+                }
+            }
+            else{
+                use_texture = !use_texture;
+                cout << "Texture Off" << endl;
+            }
+            break;
+        }
+
         case 'x':{
             cout << "Terminating program\n";
             for(Object* obj : objects){
@@ -474,6 +669,7 @@ void AlphaNumericKeyListener(unsigned char key, int x, int y){
             for(Light* light : lights){
                 delete light; // Free memory
             }
+            if (texture_data) stbi_image_free(texture_data);
             exit(0);
             break;
         }
@@ -597,6 +793,7 @@ void load_data(){
     input_file >> recursion_levels >> image_width;
     image_height = image_width;
 
+    cout << "Recursion Levels: " << recursion_levels << endl;
     int num_objects, num_point_lights, num_spot_lights;
     input_file >> num_objects;
 
@@ -652,7 +849,7 @@ void load_data(){
     }
 
     Floor* floor = new Floor(1000,20);
-    floor->setCoefficients(CoEfficients(0.4, 0.2, 0.2, 0.2));
+    floor->setCoefficients(CoEfficients(0.2, 0.4, 0.2, 0.4));
     floor->setShine(10);
     objects.push_back(floor);
 
@@ -704,12 +901,14 @@ void init_openGL(int* argc, char** argv){
     glutSpecialFunc(SpecialKeyListener);
     glClearColor(0.0, 0.0, 0.0, 1.0);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_TEXTURE_2D);
 
     glutMainLoop();
 }
 
 int main(int argc, char** argv){
     load_data();
+    load_texture("texture_2.jpg");
     init_openGL(&argc,argv);
     return 0;
 }

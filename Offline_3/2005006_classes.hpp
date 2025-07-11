@@ -1,7 +1,5 @@
 #include<bits/stdc++.h>
-#include<GL/glut.h>
-#include"bitmap_image.hpp"
-#define deg2rad M_PI/180.0
+
 
 enum rotation_type {yaw,pitch,roll};
 class Vector{
@@ -40,6 +38,9 @@ class Vector{
         }
         return Vector(x/length, y/length, z/length);
     }
+    double length() const {
+        return sqrt((x * x) + (y * y) + (z * z));
+    }
 };
 
 class Matrix{
@@ -61,7 +62,17 @@ class Color{
     double r, g, b;
     Color() : r(0), g(0), b(0) {}
     Color(double r, double g, double b) : r(r), g(g), b(b) {}
+    Color operator*(double scalar) const {
+        return Color(r * scalar, g * scalar, b * scalar);
+    }
+    Color operator+(const Color& other) const {
+        return Color(r + other.r, g + other.g, b + other.b);
+    }
+    Color operator*(const Color& color) const {
+        return Color(r * color.r, g * color.g, b * color.b);
+    }
 };
+
 class CoEfficients{
     public: 
     double ambient, diffuse, specular, reflection;
@@ -106,7 +117,8 @@ class Object{
         this->E = E; this->F = F; this->G = G; this->H = H;
         this->I = I; this->J = J;
     }
-    virtual double intersect(const Ray& ray, const Color& color, int level);
+    virtual double intersect(const Ray& ray, Color& color, int level);
+    virtual Vector getNormal(const Vector& p);
 };
 
 
@@ -117,7 +129,8 @@ class Sphere : public Object {
         length = radius;
     }
     void draw() override;
-    double intersect(const Ray& ray, const Color& color, int level) override;
+    double intersect(const Ray& ray, Color& color, int level) override;
+    Vector getNormal(const Vector& p) override;
 };
 
 class Triangle : public Object {
@@ -125,7 +138,8 @@ class Triangle : public Object {
     Vector a, b, c;
     Triangle(Vector a, Vector b, Vector c) : a(a), b(b), c(c) {}
     void draw() override;
-    double intersect(const Ray& ray, const Color& color, int level) override;
+    double intersect(const Ray& ray, Color& color, int level) override;
+    Vector getNormal(const Vector& p) override;
 };
 
 class Light{
@@ -133,6 +147,7 @@ class Light{
     Vector light_position;
     Color color;
     Light(Vector position, Color color) : light_position(position), color(color){}
+    virtual ~Light() {}
 };
 
 class PointLight : public Light{
@@ -155,8 +170,9 @@ class Floor : public Object {
         length = tile_width;
     }
     void draw() override;
-    double intersect(const Ray& ray, const Color& color, int level) override;
+    double intersect(const Ray& ray, Color& color, int level) override;
     void setColor(Vector p);
+    Vector getNormal(const Vector& p) override;
 };
 
 
